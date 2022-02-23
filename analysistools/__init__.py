@@ -8,3 +8,4 @@ from .parameter_estimation_ECF import *
 from .conditional_averaging import cond_av
 from .conditional_averaging_2d import condavg_2d
 from .peak_detection import detect_peaks_1d
+from .random_phase import *
