@@ -1,7 +1,7 @@
 import os
 from setuptools import setup
 
-name = "analysistools"
+name = "fpp-analysis-tools"
 
 with open("README.md") as f:
     long_description = f.read()
@@ -10,7 +10,8 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 setup(
     name=name,
-    description="Analysis tools for time series",
+    description="Analysis tools for time series used by the fusion energy group at UiT",
+    long_description=long_description,
     url="https://github.com/uit-cosmo/fpp-analysis-tools",
     author="Gregor Decristoforo",
     author_email="gregor.decristoforo@uit.no",
