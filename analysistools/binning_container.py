@@ -158,12 +158,11 @@ class binning_container(object):
         all_bursts = np.array(self.bins[idx])
         ca = all_bursts.mean(axis=0)
         tmp = all_bursts - ca[np.newaxis, :].repeat(all_bursts.shape[0], axis=0)
-        cvar = 1.0 - (tmp ** 2.0).mean(axis=0) / (all_bursts ** 2.0).mean(axis=0)
-        return cvar
+        return 1.0 - (tmp ** 2.0).mean(axis=0) / (all_bursts ** 2.0).mean(axis=0)
 
 
 # Exemplary use of binning_container to find conditional averages
-if __name__ is "__main__()":
+if __name__ == "__main__()":
     # define the conditional averaging threshold
     burst_threshold = 2.5
     # define the separation between neighbouring bursts, in samples
