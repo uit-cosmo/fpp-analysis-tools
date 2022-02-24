@@ -12,6 +12,7 @@ setup(
     name=name,
     description="Analysis tools for time series used by the fusion energy group at UiT",
     long_description=long_description,
+    long_description_content_type="text/markdown",
     url="https://github.com/uit-cosmo/fpp-analysis-tools",
     author="Gregor Decristoforo",
     author_email="gregor.decristoforo@uit.no",
