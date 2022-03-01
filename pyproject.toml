@@ -8,8 +8,8 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.11"
-numpy = "^1.22.2"
+python = ">=3.8,<3.11"
+numpy = "^1.18"
 scipy = "^1.8.0"
 tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
