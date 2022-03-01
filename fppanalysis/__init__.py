@@ -12,4 +12,4 @@ from .random_phase import *
 from .binning_container import *
 from .parameter_estimation_ECF import *
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

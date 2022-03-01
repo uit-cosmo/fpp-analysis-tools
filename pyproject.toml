@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fppanalysis"
-version = "0.1.0"
+version = "0.1.1"
 description = "Analysis tools for time series"
 homepage = "https://github.com/uit-cosmo/fpp-analysis-tools"
 authors = ["gregordecristoforo <gregor.decristoforo@gmail.com>"]
