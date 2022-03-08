@@ -3,7 +3,7 @@ from .deconvolution_methods import *
 from .distributions import *
 from .estimate_hurst import *
 from .excess_statistics import *
-from .moving_average import *
+from .running_moments import *
 from .parameter_estimation_ECF import *
 from .conditional_averaging import cond_av
 from .conditional_averaging_2d import condavg_2d
