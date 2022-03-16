@@ -6,34 +6,36 @@
 # Check that the result falls to zero during quiet periods, or amplitudes
 # may not be correctly calculated.
 #
-# Then, use find_amp_ta to calculate the peaks. The default values work OK.
-# Noise is handeled by increasing window_length or order in find_amp_ta.
+# Then, use three_point_maxima function to find the peaks.
+# Noise is handeled by setting a height threshold related to
+# the intermittency parameter (gamma), noise to signal ratio (epsilon) and the mean amplitude of the signal (<A>)
+# where this is <A>*square_root(gamma*epsilon)
 
 
-def RL_gauss_deconvolve(sig, kern, iterlist, init=None, cutoff=1e-10, sf=1):
+
+def RL_gauss_deconvolve(
+    signal, kern, iteration_list, initial_guess=None, cutoff=1e-10, scale_factor=1
+):
     """
-    Use: RL_gauss_deconvolve(sig,kern, iterlist, init=None, cutoff=1e-10)
-    Performs the Richardson-Lucy deconvolution for normally distributed noise.
+    Use: Performs the Richardson-Lucy (RL) deconvolution for normally distributed noise.
     See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
     and https://arxiv.org/abs/1802.05052.
-
     Input:
-        sig: signal to be deconvolved ............................. 1D np array
-        kern: deconvolution kernel ................................ 1D np array
-        iterlist: the number of iterations. ....................... int or
+        signal: signal to be deconvolved ............................. 1D np array
+        kern: deconvolution kernel, this can be the pulse shape or the forcing ...................... 1D np array
+        iteration_list: the number of iterations. ....................... int or
               If this is a list, the deconvolution result           list of int
-              is returned for each element in iterlist, see below.
-        init: initial array guess. Leave blank for all zeros. ..... 1D np array
+              is returned for each element in iteration_list, see below.
+        initial_guess: initial array guess. Leave blank for all zeros. ..... 1D np array
         cutoff: for avoiding divide by zero errors. ............... float
-        sf: scale factor which is multiplied with b condition...... float > 0, default = 1
-
+        scale_factor: scale factor which is multiplied with b condition...... float > 0, default = 1
     Output:
-        res: result array. NxM, where N=len(sig) and M=len(iterlist)   np array
-        err: mean absolute difference between iterations .......... 1D np array
+        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np array
+        error: mean absolute difference between iterations .......... 1D np array
     
     WARNING:
     For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
-    Do a check like the following before putting S into the sig argument.
+    Do a check like the following before putting S into the signal argument.
     if (len(S) % 2) == 0:
         S = S[:-1]
         T = T[:-1]
@@ -42,60 +44,177 @@ def RL_gauss_deconvolve(sig, kern, iterlist, init=None, cutoff=1e-10, sf=1):
     from tqdm import tqdm
     from scipy.signal import fftconvolve
 
-    if init is None:
-        update0 = np.ones(sig.size)
-        update1 = np.ones(sig.size)
+    if initial_guess is None:
+        current_result = np.ones(signal.size)
+        updated_result = np.ones(signal.size)
     else:
-        update0 = np.copy(init)
-        update1 = np.copy(init)
+        current_result = np.copy(initial_guess)
+        updated_result = np.copy(initial_guess)
 
-    sigtmp = np.copy(sig)
-    kerntmp = np.copy(kern)
+    signal_temporary = np.copy(signal)
+    kern_temporary = np.copy(kern)
 
-    if type(iterlist) is int:
-        iterlist = [
-            iterlist,
+    if type(iteration_list) is int:
+        iteration_list = [
+            iteration_list,
         ]
 
-    err = np.zeros(iterlist[-1] + 1)
-    err[0] = np.sum((sigtmp - fftconvolve(update0, kerntmp, "same")) ** 2)
-    res = np.zeros([sig.size, len(iterlist)])
+    error = np.zeros(iteration_list[-1] + 1)
+    error[0] = np.sum(
+        (signal_temporary - fftconvolve(current_result, kern_temporary, "same")) ** 2
+    )
+    result = np.zeros([signal.size, len(iteration_list)])
 
-    kern_inv = kerntmp[::-1]
-    sigconv = fftconvolve(sigtmp, kern_inv, "same")
-    kernconv = fftconvolve(kerntmp, kern_inv, "same")
+    inverse_kern = kern_temporary[::-1]
+    signal_convolution_inverse_kern = fftconvolve(
+        signal_temporary, inverse_kern, "same"
+    )
+    kern_convolution_inverse_kern = fftconvolve(kern_temporary, inverse_kern, "same")
 
-    # To ensure we have non-negative iterations we apply a condition which is dependent on sigconv
-    # If signconv is negative then b = cutoff - sf*np.amin(sigconv). Cutoff avoids division by 0.
-    # If sigconv is positive, let b = cutoff to ensure non-zero division.
-    if np.amin(sigconv) < 0:
-        b_min = np.amin(sigconv)
-        b = cutoff - sf * b_min
+    # To ensure we have non-negative iterations we apply a condition which is dependent on signal_convolution_inverse_kern
+    # If signal_convolution_inverse_kern is negative then b = cutoff - scale_factor*np.amin(signal_convolution_inverse_kern).
+    # Cutoff avoids division by 0.
+    # If signal_convolution_inverse_kern is positive, let b = cutoff to ensure non-zero division.
+    if np.amin(signal_convolution_inverse_kern) < 0:
+        b_min = np.amin(signal_convolution_inverse_kern)
+        b = cutoff - scale_factor * b_min
     else:
         b = cutoff
 
-    index_array = np.arange(sigtmp.size)
     count = 0
 
-    for i in tqdm(range(1, iterlist[-1] + 1), position=0, leave=True):
+    for i in tqdm(range(1, iteration_list[-1] + 1), position=0, leave=True):
         # If an element in the previous iteration is very close to zero,
         # the same element in the next iteration should be as well.
         # This is handeled numerically by setting all elements <= cutoff to 0
         # and only performing the interation on those elements > cutoff.
 
-        tmp = fftconvolve(update0, kernconv, "same")
+        updated_convolution = fftconvolve(
+            current_result, kern_convolution_inverse_kern, "same"
+        )
 
-        update1 = (update0 * (sigconv + b)) / (tmp + b)
+        updated_result = (current_result * (signal_convolution_inverse_kern + b)) / (
+            updated_convolution + b
+        )
 
-        err[i] = np.sum((sigtmp - fftconvolve(update1, kerntmp, "same")) ** 2)
-        update0[:] = update1[:]
+        error[i] = np.sum(
+            (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
+            ** 2
+        )
 
-        if i == iterlist[count]:
-            print("i = {}".format(iterlist[count]), flush=True)
-            res[:, count] = update1[:]
+        current_result[:] = updated_result[:]
+
+        if i == iteration_list[count]:
+            print("i = {}".format(iteration_list[count]), flush=True)
+            result[:, count] = updated_result[:]
             count += 1
 
-    return res, err
+    return result, error
+
+
+def gpu_RL_gauss_deconvolve(
+    signal, kern, iteration_list, initial_guess=None, cutoff=1e-10, scale_factor=1
+):
+    """
+    Use: Performs the GPU-accelerated version of the Richardson-Lucy deconvolution for normally distributed noise.
+    See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
+    and https://arxiv.org/abs/1802.05052.
+    Input:
+        signal: signal to be deconvolved ............................. 1D cp array
+        kern: deconvolution kernel ................................ 1D cp array
+        iteration_list: the number of iterations. ....................... int or
+              If this is a list, the deconvolution result           list of int
+              is returned for each element in iteration_list, see below.
+        initial_guess: initial array guess. Leave blank for all zeros. ..... 1D cp array
+        cutoff: for avoiding divide by zero errors. ............... float
+        scale_factor: scale factor which is multiplied with b condition...... float > 0, default = 1
+    Output:
+        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   cp array
+        error: mean absolute difference between iterations .......... 1D cp array
+    
+    WARNING:
+    For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
+    Do a check like the following before putting S into the signal argument.
+    if (len(S) % 2) == 0:
+        S = S[:-1]
+        T = T[:-1]
+    """
+    import numpy as np
+    from tqdm import tqdm
+
+    import cupy as cp
+    from cusignal.convolution.convolve import fftconvolve
+
+    pool = cp.cuda.MemoryPool(cp.cuda.malloc_managed)
+    cp.cuda.set_allocator(pool.malloc)
+
+    if initial_guess is None:
+        current_result = cp.ones(signal.size)
+        updated_result = cp.ones(signal.size)
+    else:
+        current_result = cp.copy(initial_guess)
+        updated_result = cp.copy(initial_guess)
+
+    signal_temporary = cp.copy(signal)
+    kern_temporary = cp.copy(kern)
+
+    if type(iteration_list) is int:
+        iteration_list = [
+            iteration_list,
+        ]
+
+    error = cp.zeros(iteration_list[-1] + 1)
+    error[0] = cp.sum(
+        (signal_temporary - fftconvolve(current_result, kern_temporary, "same")) ** 2
+    )
+
+    result = cp.zeros([signal.size, len(iteration_list)])
+
+    inverse_kern = kern_temporary[::-1]
+    signal_convolution_inverse_kern = fftconvolve(
+        signal_temporary, inverse_kern, "same"
+    )
+
+    kern_convolution_inverse_kern = fftconvolve(kern_temporary, inverse_kern, "same")
+
+    # To ensure we have non-negative iterations we apply a condition which is dependent on signal_convolution_inverse_kern
+    # If signconv is negative then b = cutoff - scale_factor*np.amin(signal_convolution_inverse_kern). Cutoff avoids division by 0.
+    # If signal_convolution_inverse_kern is positive, let b = cutoff to ensure non-zero division.
+    if cp.amin(signal_convolution_inverse_kern) < 0:
+        b_min = cp.amin(signal_convolution_inverse_kern)
+        b = cutoff - scale_factor * b_min
+    else:
+        b = cutoff
+
+    count = 0
+
+    for i in tqdm(range(1, iteration_list[-1] + 1), position=0, leave=True):
+        # If an element in the previous iteration is very close to zero,
+        # the same element in the next iteration should be as well.
+        # This is handeled numerically by setting all elements <= cutoff to 0
+        # and only performing the interation on those elements > cutoff.
+
+        updated_convolution = fftconvolve(
+            current_result, kern_convolution_inverse_kern, "same"
+        )
+
+        updated_result = (current_result * (signal_convolution_inverse_kern + b)) / (
+            updated_convolution + b
+        )
+
+        error[i] = cp.sum(
+            (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
+            ** 2
+        )
+
+        current_result[:] = updated_result[:]
+
+        if i == iteration_list[count]:
+            print("i = {}".format(iteration_list[count]), flush=True)
+            result[:, count] = updated_result[:]
+            count += 1
+
+    return result, error
 
 
 def three_point_maxima(deconv_result, time_base=None, **kwargs):
