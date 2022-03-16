@@ -98,24 +98,22 @@ def RL_gauss_deconvolve(sig, kern, iterlist, init=None, cutoff=1e-10, sf=1):
     return res, err
 
 
-def find_amp_ta_3nn(D, tb=None, **kwargs):
+def three_point_maxima(deconv_result, time_base=None, **kwargs):
     """
-    Find amplitudes and arrival times of the deconvoved signal D
+    Find amplitudes and arrival times of the deconvolved signal
     using scipy.signal.find_peaks.
     
-    Use: ta,amp = find_amp_ta(D, tb=None, **kwargs)
-    Estimates arrival times and amplitudes
-    of the FPP from the deconvolved signal D.
+    Use: Estimates arrival times and amplitudes of the FPP from the deconvolved signal.
     Input:
-        D: result of deconvolution ............... numpy array
-        tb: (optional) time array ................ numpy array
+        deconv_result: result of deconvolution ............... numpy array
+        time_base: (optional) time array ................ numpy array
         **kwargs ................................. passed to find_peaks
     Output:
-        ta: estimated location of arrivals ....... numpy array
-        amp: estimated amplitudes ................ numpy array
+        estimated_arrival_times: estimated location of arrivals ....... numpy array
+        estimated_amplitudes: estimated amplitudes ................ numpy array
         
-    If tb is given, ta are the arrival times in tb. 
-    If tb is not given, ta are the peak locations in D.
+    If time_base is given, estimated_arrival_times are the arrival times in time_base. 
+    If time_base is not given, ta are the peak locations in deconv_result.
     
     By default, this is a pure 3-point maxima. 
     In the presence of noise, we suggest using one of the following
@@ -124,7 +122,7 @@ def find_amp_ta_3nn(D, tb=None, **kwargs):
         prominence: required prominence of peak
             may require setting wlen as well, for large arrays.
     
-    In order to take the entire mass of each peak of D into account,
+    In order to take the entire mass of each peak of deconv_result into account,
     the amplitudes are estimated by summing from one minima between two peaks
     to the minima between the next two peaks. The value of the minima is 
     divided proportionally between the two peaks, according to their height.
@@ -135,14 +133,14 @@ def find_amp_ta_3nn(D, tb=None, **kwargs):
     from scipy.signal import find_peaks
 
     # Find_peaks discounts the endpoints
-    Dtmp = np.zeros(D.size + 2)
-    Dtmp[1:-1] = D[:]
+    deconv_result_temporary = np.zeros(deconv_result.size + 2)
+    deconv_result_temporary[1:-1] = deconv_result[:]
 
-    peak_loc = find_peaks(Dtmp, **kwargs)[0]
+    peak_location = find_peaks(deconv_result_temporary, **kwargs)[0]
 
-    amp = Dtmp[peak_loc]
+    estimated_amplitudes = deconv_result_temporary[peak_location]
 
-    if tb is None:
-        return peak_loc - 1, amp
+    if time_base is None:
+        return peak_location - 1, estimated_amplitudes
     else:
-        return tb[peak_loc - 1], amp
+        return time_base[peak_location - 1], estimated_amplitudes
