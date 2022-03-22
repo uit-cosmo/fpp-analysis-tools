@@ -12,23 +12,29 @@
 # where this is <A>*square_root(gamma*epsilon)
 
 
-
 def RL_gauss_deconvolve(
-    signal, kern, iteration_list, initial_guess=None, cutoff=1e-10, scale_factor=1
+    signal,
+    kern,
+    iteration_list,
+    initial_guess=None,
+    cutoff=1e-10,
+    scale_factor=1,
+    gpu=False,
 ):
     """
     Use: Performs the Richardson-Lucy (RL) deconvolution for normally distributed noise.
     See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
     and https://arxiv.org/abs/1802.05052.
     Input:
-        signal: signal to be deconvolved ............................. 1D np array
-        kern: deconvolution kernel, this can be the pulse shape or the forcing ...................... 1D np array
-        iteration_list: the number of iterations. ....................... int or
-              If this is a list, the deconvolution result           list of int
+        signal: signal to be deconvolved ...................................... 1D np array
+        kern: deconvolution kernel, this can be the pulse shape or the forcing  1D np array
+        iteration_list: the number of iterations. ............................. int or list of int
+              If this is a list, the deconvolution result 
               is returned for each element in iteration_list, see below.
-        initial_guess: initial array guess. Leave blank for all zeros. ..... 1D np array
-        cutoff: for avoiding divide by zero errors. ............... float
-        scale_factor: scale factor which is multiplied with b condition...... float > 0, default = 1
+        initial_guess: initial array guess. Leave blank for all zeros. ........ 1D np array
+        cutoff: for avoiding divide by zero errors. ........................... float
+        scale_factor: scale factor which is multiplied with b condition........ float > 0, default = 1
+        gpu: use GPU-accelerated version....................................... bool
     Output:
         result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np array
         error: mean absolute difference between iterations .......... 1D np array
@@ -40,30 +46,40 @@ def RL_gauss_deconvolve(
         S = S[:-1]
         T = T[:-1]
     """
-    import numpy as np
     from tqdm import tqdm
-    from scipy.signal import fftconvolve
+
+    if gpu:
+        import cupy as xp
+        from cusignal.convolution.convolve import fftconvolve
+    else:
+        import numpy as xp
+        from scipy.signal import fftconvolve
+
+    if gpu:
+        pool = cp.cuda.MemoryPool(cp.cuda.malloc_managed)
+        cp.cuda.set_allocator(pool.malloc)
 
     if initial_guess is None:
-        current_result = np.ones(signal.size)
-        updated_result = np.ones(signal.size)
+        current_result = xp.ones(signal.size)
+        updated_result = xp.ones(signal.size)
     else:
-        current_result = np.copy(initial_guess)
-        updated_result = np.copy(initial_guess)
+        current_result = xp.copy(initial_guess)
+        updated_result = xp.copy(initial_guess)
 
-    signal_temporary = np.copy(signal)
-    kern_temporary = np.copy(kern)
+    signal_temporary = xp.copy(signal)
+    kern_temporary = xp.copy(kern)
 
     if type(iteration_list) is int:
         iteration_list = [
             iteration_list,
         ]
 
-    error = np.zeros(iteration_list[-1] + 1)
-    error[0] = np.sum(
+    error = xp.zeros(iteration_list[-1] + 1)
+    error[0] = xp.sum(
         (signal_temporary - fftconvolve(current_result, kern_temporary, "same")) ** 2
     )
-    result = np.zeros([signal.size, len(iteration_list)])
+
+    result = xp.zeros([signal.size, len(iteration_list)])
 
     inverse_kern = kern_temporary[::-1]
     signal_convolution_inverse_kern = fftconvolve(
@@ -75,8 +91,8 @@ def RL_gauss_deconvolve(
     # If signal_convolution_inverse_kern is negative then b = cutoff - scale_factor*np.amin(signal_convolution_inverse_kern).
     # Cutoff avoids division by 0.
     # If signal_convolution_inverse_kern is positive, let b = cutoff to ensure non-zero division.
-    if np.amin(signal_convolution_inverse_kern) < 0:
-        b_min = np.amin(signal_convolution_inverse_kern)
+    if xp.amin(signal_convolution_inverse_kern) < 0:
+        b_min = xp.amin(signal_convolution_inverse_kern)
         b = cutoff - scale_factor * b_min
     else:
         b = cutoff
@@ -97,7 +113,7 @@ def RL_gauss_deconvolve(
             updated_convolution + b
         )
 
-        error[i] = np.sum(
+        error[i] = xp.sum(
             (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
             ** 2
         )
@@ -105,112 +121,7 @@ def RL_gauss_deconvolve(
         current_result[:] = updated_result[:]
 
         if i == iteration_list[count]:
-            print("i = {}".format(iteration_list[count]), flush=True)
-            result[:, count] = updated_result[:]
-            count += 1
-
-    return result, error
-
-
-def gpu_RL_gauss_deconvolve(
-    signal, kern, iteration_list, initial_guess=None, cutoff=1e-10, scale_factor=1
-):
-    """
-    Use: Performs the GPU-accelerated version of the Richardson-Lucy deconvolution for normally distributed noise.
-    See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
-    and https://arxiv.org/abs/1802.05052.
-    Input:
-        signal: signal to be deconvolved ............................. 1D cp array
-        kern: deconvolution kernel ................................ 1D cp array
-        iteration_list: the number of iterations. ....................... int or
-              If this is a list, the deconvolution result           list of int
-              is returned for each element in iteration_list, see below.
-        initial_guess: initial array guess. Leave blank for all zeros. ..... 1D cp array
-        cutoff: for avoiding divide by zero errors. ............... float
-        scale_factor: scale factor which is multiplied with b condition...... float > 0, default = 1
-    Output:
-        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   cp array
-        error: mean absolute difference between iterations .......... 1D cp array
-    
-    WARNING:
-    For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
-    Do a check like the following before putting S into the signal argument.
-    if (len(S) % 2) == 0:
-        S = S[:-1]
-        T = T[:-1]
-    """
-    import numpy as np
-    from tqdm import tqdm
-
-    import cupy as cp
-    from cusignal.convolution.convolve import fftconvolve
-
-    pool = cp.cuda.MemoryPool(cp.cuda.malloc_managed)
-    cp.cuda.set_allocator(pool.malloc)
-
-    if initial_guess is None:
-        current_result = cp.ones(signal.size)
-        updated_result = cp.ones(signal.size)
-    else:
-        current_result = cp.copy(initial_guess)
-        updated_result = cp.copy(initial_guess)
-
-    signal_temporary = cp.copy(signal)
-    kern_temporary = cp.copy(kern)
-
-    if type(iteration_list) is int:
-        iteration_list = [
-            iteration_list,
-        ]
-
-    error = cp.zeros(iteration_list[-1] + 1)
-    error[0] = cp.sum(
-        (signal_temporary - fftconvolve(current_result, kern_temporary, "same")) ** 2
-    )
-
-    result = cp.zeros([signal.size, len(iteration_list)])
-
-    inverse_kern = kern_temporary[::-1]
-    signal_convolution_inverse_kern = fftconvolve(
-        signal_temporary, inverse_kern, "same"
-    )
-
-    kern_convolution_inverse_kern = fftconvolve(kern_temporary, inverse_kern, "same")
-
-    # To ensure we have non-negative iterations we apply a condition which is dependent on signal_convolution_inverse_kern
-    # If signconv is negative then b = cutoff - scale_factor*np.amin(signal_convolution_inverse_kern). Cutoff avoids division by 0.
-    # If signal_convolution_inverse_kern is positive, let b = cutoff to ensure non-zero division.
-    if cp.amin(signal_convolution_inverse_kern) < 0:
-        b_min = cp.amin(signal_convolution_inverse_kern)
-        b = cutoff - scale_factor * b_min
-    else:
-        b = cutoff
-
-    count = 0
-
-    for i in tqdm(range(1, iteration_list[-1] + 1), position=0, leave=True):
-        # If an element in the previous iteration is very close to zero,
-        # the same element in the next iteration should be as well.
-        # This is handeled numerically by setting all elements <= cutoff to 0
-        # and only performing the interation on those elements > cutoff.
-
-        updated_convolution = fftconvolve(
-            current_result, kern_convolution_inverse_kern, "same"
-        )
-
-        updated_result = (current_result * (signal_convolution_inverse_kern + b)) / (
-            updated_convolution + b
-        )
-
-        error[i] = cp.sum(
-            (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
-            ** 2
-        )
-
-        current_result[:] = updated_result[:]
-
-        if i == iteration_list[count]:
-            print("i = {}".format(iteration_list[count]), flush=True)
+            print(f"i = {iteration_list[count]}", flush=True)
             result[:, count] = updated_result[:]
             count += 1
 
