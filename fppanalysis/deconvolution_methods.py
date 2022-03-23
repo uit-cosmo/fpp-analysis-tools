@@ -56,8 +56,8 @@ def RL_gauss_deconvolve(
         from scipy.signal import fftconvolve
 
     if gpu:
-        pool = cp.cuda.MemoryPool(cp.cuda.malloc_managed)
-        cp.cuda.set_allocator(pool.malloc)
+        pool = xp.cuda.MemoryPool(xp.cuda.malloc_managed)
+        xp.cuda.set_allocator(pool.malloc)
 
     if initial_guess is None:
         current_result = xp.ones(signal.size)
