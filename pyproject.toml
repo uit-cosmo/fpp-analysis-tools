@@ -14,6 +14,9 @@ scipy = "^1.8.0"
 tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
 
+cupy = { version = "^10.2", optional = true }
+cusignal = { version = "^0.19", optional = true }
+
 [tool.poetry.extras]
 cupy = ["cupy"]
 cusignal = ["cusignal"]
