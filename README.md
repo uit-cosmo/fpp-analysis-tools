@@ -15,6 +15,13 @@ git clone git@github.com:uit-cosmo/fpp-analysis-tools.git
 cd fpp-analysis-tools
 poetry install
 ```
+After doing `poetry install`, you can install `cusignal` and `cupy` in order to use the GPU implementation of the deconvolution
+with the following in a conda environment:
+
+```sh
+conda install -c rapidsai -c nvidia -c conda-forge \
+    cusignal=21.08 python=3.8 cudatoolkit=11.0
+```
 
 ## Usage
 You can import all functions directly from `fppanalysis`, such as
