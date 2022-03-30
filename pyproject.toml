@@ -13,22 +13,6 @@ numpy = "^1.18"
 scipy = "^1.8.0"
 tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
-cupy = { version = "^9.0.0", optional = true }
-cudatoolkit = { version = ">=11.0,<=11.2", optional = true }
-cusignal = { version = ">=0.19,<=0.22", optional = true }
-
-[tool.poetry.extras]
-cupy = ["cupy"]
-cudatoolkit = ["cudatoolkit"]
-cusignal = ["cusignal"]
-
-[tool.poetry2conda]
-name = "conda-fpp-analysis"
-
-[tool.poetry2conda.dependencies]
-cupy = { name = "cupy", channel = "conda-forge", version = "^10.2" }
-cudatoolkit = { name = "cudatoolkit", channel = "conda-forge", version = ">=11.0,<=11.2" }
-cusignal = { name = "cusignal", channel = "rapidsai", version = ">=0.19,<=0.22" }
 
 [build-system]
 requires = ["poetry-core"]
