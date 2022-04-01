@@ -13,7 +13,6 @@ numpy = "^1.18"
 scipy = "^1.8.0"
 tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
-numba = "^0.55.1"
 
 [build-system]
 requires = ["poetry-core"]
