@@ -20,10 +20,10 @@ If you plan to use the GPUs, specifically for the deconvolution then setup the f
 ```sh
 conda create --name my-env
 conda activate my-env
-conda install poetry 
-poetry install
 conda install -c rapidsai -c nvidia -c conda-forge \
     cusignal=21.08 python=3.8 cudatoolkit=11.0
+conda install poetry 
+poetry install
 ```
 
 ## Usage
