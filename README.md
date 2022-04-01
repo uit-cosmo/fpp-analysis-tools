@@ -18,9 +18,12 @@ poetry install
 
 If you plan to use the GPUs, specifically for the deconvolution then setup the following conda environment:
 ```sh
-conda env create -f environment.yml
-conda activate conda-fpp-analysis
+conda create --name my-env
+conda activate my-env
+conda install poetry 
 poetry install
+conda install -c rapidsai -c nvidia -c conda-forge \
+    cusignal=21.08 python=3.8 cudatoolkit=11.0
 ```
 
 ## Usage
