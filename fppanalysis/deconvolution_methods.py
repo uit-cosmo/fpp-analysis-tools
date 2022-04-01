@@ -26,25 +26,26 @@ def RL_gauss_deconvolve(
     See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
     and https://arxiv.org/abs/1802.05052.
     Input:
-        signal: signal to be deconvolved ...................................... 1D np array
-        kern: deconvolution kernel, this can be the pulse shape or the forcing  1D np array
-        iteration_list: the number of iterations. ............................. int or list of int
-              If this is a list, the deconvolution result 
-              is returned for each element in iteration_list, see below.
-        initial_guess: initial array guess. Leave blank for all zeros. ........ 1D np array
-        cutoff: for avoiding divide by zero errors. ........................... float
-        scale_factor: scale factor which is multiplied with b condition........ float > 0, default = 1
-        gpu: use GPU-accelerated version....................................... bool
+        signal: Signal to be deconvolved ..................................... 1D np/cp array
+                If gpu=True, this has to be a cupy array.
+        kern: Deconvolution kernel, this can be the pulse shape or the forcing  1D np/cp array
+               If gpu=True, this has to be a cupy array.
+        iteration_list: The number of iterations. ............................. int or list of int
+                        If this is a list, the deconvolution result is returned for each element in iteration_list, see below.
+        initial_guess: Initial array guess. Leave blank for all zeros. ........ 1D np/cp array
+        cutoff: For avoiding divide by zero errors. ........................... float
+        scale_factor: Scale factor which is multiplied with b condition........ float > 0, default = 1
+        gpu: Use GPU-accelerated version....................................... bool
     Output:
         result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np array
         error: mean absolute difference between iterations .......... 1D np array
     
     WARNING:
     For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
-    Do a check like the following before putting S into the signal argument.
-    if (len(S) % 2) == 0:
-        S = S[:-1]
-        T = T[:-1]
+    Do a check like the following before putting signal array into the 'signal' argument.
+    if (len(signal) % 2) == 0:
+        signal = signal[:-1]
+        time = time[:-1]
     """
     from tqdm import tqdm
 
