@@ -6,116 +6,145 @@
 # Check that the result falls to zero during quiet periods, or amplitudes
 # may not be correctly calculated.
 #
-# Then, use find_amp_ta to calculate the peaks. The default values work OK.
-# Noise is handeled by increasing window_length or order in find_amp_ta.
+# Then, use three_point_maxima function to find the peaks.
+# Noise is handeled by setting a height threshold related to
+# the intermittency parameter (gamma), noise to signal ratio (epsilon) and the mean amplitude of the signal (<A>)
+# where this is <A>*square_root(gamma*epsilon)
 
 
-def RL_gauss_deconvolve(sig, kern, iterlist, init=None, cutoff=1e-10, sf=1):
+def RL_gauss_deconvolve(
+    signal,
+    kern,
+    iteration_list,
+    initial_guess=None,
+    cutoff=1e-10,
+    scale_factor=1,
+    gpu=False,
+):
     """
-    Use: RL_gauss_deconvolve(sig,kern, iterlist, init=None, cutoff=1e-10)
-    Performs the Richardson-Lucy deconvolution for normally distributed noise.
+    Use: Performs the Richardson-Lucy (RL) deconvolution for normally distributed noise.
     See https://en.wikipedia.org/wiki/Richardson%E2%80%93Lucy_deconvolution
     and https://arxiv.org/abs/1802.05052.
-
     Input:
-        sig: signal to be deconvolved ............................. 1D np array
-        kern: deconvolution kernel ................................ 1D np array
-        iterlist: the number of iterations. ....................... int or
-              If this is a list, the deconvolution result           list of int
-              is returned for each element in iterlist, see below.
-        init: initial array guess. Leave blank for all zeros. ..... 1D np array
-        cutoff: for avoiding divide by zero errors. ............... float
-        sf: scale factor which is multiplied with b condition...... float > 0, default = 1
-
+        signal: Signal to be deconvolved ..................................... 1D np/cp array
+                If gpu=True, this has to be a cupy array.
+        kern: Deconvolution kernel, this can be the pulse shape or the forcing  1D np/cp array
+               If gpu=True, this has to be a cupy array.
+        iteration_list: The number of iterations. ............................. int or list of int
+                        If this is a list, the deconvolution result is returned for each element in iteration_list, see below.
+        initial_guess: Initial array guess. Leave blank for all zeros. ........ 1D np/cp array
+        cutoff: For avoiding divide by zero errors. ........................... float
+        scale_factor: Scale factor which is multiplied with b condition........ float > 0, default = 1
+        gpu: Use GPU-accelerated version....................................... bool
     Output:
-        res: result array. NxM, where N=len(sig) and M=len(iterlist)   np array
-        err: mean absolute difference between iterations .......... 1D np array
+        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np array
+        error: mean absolute difference between iterations .......... 1D np array
     
     WARNING:
     For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
-    Do a check like the following before putting S into the sig argument.
-    if (len(S) % 2) == 0:
-        S = S[:-1]
-        T = T[:-1]
+    Do a check like the following before putting signal array into the 'signal' argument.
+    if (len(signal) % 2) == 0:
+        signal = signal[:-1]
+        time = time[:-1]
     """
-    import numpy as np
     from tqdm import tqdm
-    from scipy.signal import fftconvolve
 
-    if init is None:
-        update0 = np.ones(sig.size)
-        update1 = np.ones(sig.size)
+    if gpu:
+        import cupy as xp
+        from cusignal.convolution.convolve import fftconvolve
     else:
-        update0 = np.copy(init)
-        update1 = np.copy(init)
+        import numpy as xp
+        from scipy.signal import fftconvolve
 
-    sigtmp = np.copy(sig)
-    kerntmp = np.copy(kern)
+    if gpu:
+        pool = xp.cuda.MemoryPool(xp.cuda.malloc_managed)
+        xp.cuda.set_allocator(pool.malloc)
 
-    if type(iterlist) is int:
-        iterlist = [
-            iterlist,
+    if initial_guess is None:
+        current_result = xp.ones(signal.size)
+        updated_result = xp.ones(signal.size)
+    else:
+        current_result = xp.copy(initial_guess)
+        updated_result = xp.copy(initial_guess)
+
+    signal_temporary = xp.copy(signal)
+    kern_temporary = xp.copy(kern)
+
+    if type(iteration_list) is int:
+        iteration_list = [
+            iteration_list,
         ]
 
-    err = np.zeros(iterlist[-1] + 1)
-    err[0] = np.sum((sigtmp - fftconvolve(update0, kerntmp, "same")) ** 2)
-    res = np.zeros([sig.size, len(iterlist)])
+    error = xp.zeros(iteration_list[-1] + 1)
+    error[0] = xp.sum(
+        (signal_temporary - fftconvolve(current_result, kern_temporary, "same")) ** 2
+    )
 
-    kern_inv = kerntmp[::-1]
-    sigconv = fftconvolve(sigtmp, kern_inv, "same")
-    kernconv = fftconvolve(kerntmp, kern_inv, "same")
+    result = xp.zeros([signal.size, len(iteration_list)])
 
-    # To ensure we have non-negative iterations we apply a condition which is dependent on sigconv
-    # If signconv is negative then b = cutoff - sf*np.amin(sigconv). Cutoff avoids division by 0.
-    # If sigconv is positive, let b = cutoff to ensure non-zero division.
-    if np.amin(sigconv) < 0:
-        b_min = np.amin(sigconv)
-        b = cutoff - sf * b_min
+    inverse_kern = kern_temporary[::-1]
+    signal_convolution_inverse_kern = fftconvolve(
+        signal_temporary, inverse_kern, "same"
+    )
+    kern_convolution_inverse_kern = fftconvolve(kern_temporary, inverse_kern, "same")
+
+    # To ensure we have non-negative iterations we apply a condition which is dependent on signal_convolution_inverse_kern
+    # If signal_convolution_inverse_kern is negative then b = cutoff - scale_factor*np.amin(signal_convolution_inverse_kern).
+    # Cutoff avoids division by 0.
+    # If signal_convolution_inverse_kern is positive, let b = cutoff to ensure non-zero division.
+    if xp.amin(signal_convolution_inverse_kern) < 0:
+        b_min = xp.amin(signal_convolution_inverse_kern)
+        b = cutoff - scale_factor * b_min
     else:
         b = cutoff
 
-    index_array = np.arange(sigtmp.size)
     count = 0
 
-    for i in tqdm(range(1, iterlist[-1] + 1), position=0, leave=True):
+    for i in tqdm(range(1, iteration_list[-1] + 1), position=0, leave=True):
         # If an element in the previous iteration is very close to zero,
         # the same element in the next iteration should be as well.
         # This is handeled numerically by setting all elements <= cutoff to 0
         # and only performing the interation on those elements > cutoff.
 
-        tmp = fftconvolve(update0, kernconv, "same")
+        updated_convolution = fftconvolve(
+            current_result, kern_convolution_inverse_kern, "same"
+        )
 
-        update1 = (update0 * (sigconv + b)) / (tmp + b)
+        updated_result = (current_result * (signal_convolution_inverse_kern + b)) / (
+            updated_convolution + b
+        )
 
-        err[i] = np.sum((sigtmp - fftconvolve(update1, kerntmp, "same")) ** 2)
-        update0[:] = update1[:]
+        error[i] = xp.sum(
+            (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
+            ** 2
+        )
 
-        if i == iterlist[count]:
-            print("i = {}".format(iterlist[count]), flush=True)
-            res[:, count] = update1[:]
+        current_result[:] = updated_result[:]
+
+        if i == iteration_list[count]:
+            print(f"i = {iteration_list[count]}", flush=True)
+            result[:, count] = updated_result[:]
             count += 1
 
-    return res, err
+    return result, error
 
 
-def find_amp_ta_3nn(D, tb=None, **kwargs):
+def three_point_maxima(deconv_result, time_base=None, **kwargs):
     """
-    Find amplitudes and arrival times of the deconvoved signal D
+    Find amplitudes and arrival times of the deconvolved signal
     using scipy.signal.find_peaks.
     
-    Use: ta,amp = find_amp_ta(D, tb=None, **kwargs)
-    Estimates arrival times and amplitudes
-    of the FPP from the deconvolved signal D.
+    Use: Estimates arrival times and amplitudes of the FPP from the deconvolved signal.
     Input:
-        D: result of deconvolution ............... numpy array
-        tb: (optional) time array ................ numpy array
+        deconv_result: result of deconvolution ............... numpy array
+        time_base: (optional) time array ................ numpy array
         **kwargs ................................. passed to find_peaks
     Output:
-        ta: estimated location of arrivals ....... numpy array
-        amp: estimated amplitudes ................ numpy array
+        estimated_arrival_times: estimated location of arrivals ....... numpy array
+        estimated_amplitudes: estimated amplitudes ................ numpy array
         
-    If tb is given, ta are the arrival times in tb. 
-    If tb is not given, ta are the peak locations in D.
+    If time_base is given, estimated_arrival_times are the arrival times in time_base. 
+    If time_base is not given, ta are the peak locations in deconv_result.
     
     By default, this is a pure 3-point maxima. 
     In the presence of noise, we suggest using one of the following
@@ -124,7 +153,7 @@ def find_amp_ta_3nn(D, tb=None, **kwargs):
         prominence: required prominence of peak
             may require setting wlen as well, for large arrays.
     
-    In order to take the entire mass of each peak of D into account,
+    In order to take the entire mass of each peak of deconv_result into account,
     the amplitudes are estimated by summing from one minima between two peaks
     to the minima between the next two peaks. The value of the minima is 
     divided proportionally between the two peaks, according to their height.
@@ -135,237 +164,14 @@ def find_amp_ta_3nn(D, tb=None, **kwargs):
     from scipy.signal import find_peaks
 
     # Find_peaks discounts the endpoints
-    Dtmp = np.zeros(D.size + 2)
-    Dtmp[1:-1] = D[:]
+    deconv_result_temporary = np.zeros(deconv_result.size + 2)
+    deconv_result_temporary[1:-1] = deconv_result[:]
 
-    peak_loc = find_peaks(Dtmp, **kwargs)[0]
+    peak_location = find_peaks(deconv_result_temporary, **kwargs)[0]
 
-    amp = Dtmp[peak_loc]
+    estimated_amplitudes = deconv_result_temporary[peak_location]
 
-    if tb is None:
-        return peak_loc - 1, amp
+    if time_base is None:
+        return peak_location - 1, estimated_amplitudes
     else:
-        return tb[peak_loc - 1], amp
-
-
-def find_amp_ta_savgol(D, T, window_length=3):
-    """
-    This tests a new method of finding minima between peaks.
-
-    Use: ta,amp = find_amp_ta(D, T, window_length=3)
-    Estimates arrival times and amplitudes
-    of the FPP from the deconvolved signal D.
-
-    Input:
-        D: result of deconvolution ............... numpy array
-        T: time array ............................ numpy array
-        dt: time step ............................ float
-        window_length: passed to savgol_filter ... int >= 3, default 3
-
-    Output:
-        ta: estimated arrival times .............. numpy array
-        amp: estimated amplitudes ................ numpy array
-
-
-    To find ta, the derivative of D is computed
-    using a Savitzky-Golay of polynomial order 2.
-    The peaks are found from the zero-crossings of this derivative
-    in the negative direction.
-    Polynomial order 2 is chosen as it seems best for single peaks.
-    In the presence of noise, increasing window_length increases smoothing.
-
-    In order to take the entire mass of each peak of D into account,
-    the amplitudes are estimated by summing from one minima between two peaks
-    to the minima between the next two peaks, as determined by the positive
-    zero-crossings of the derivative of D.
-
-    ---min---peak----min----peak----min---
-
-    ---][--sum range-][--sum range--][----
-    """
-    import numpy as np
-    from scipy.signal import savgol_filter
-
-    dt = np.mean(np.diff(T))
-
-    # Find indices of arrival times
-    polyorder = 2
-    dD = savgol_filter(D, window_length, polyorder, deriv=1, delta=dt)
-
-    places = np.where(dD >= 0)[0]
-    dplaces = places[1:] - places[:-1]
-    split = np.where(dplaces != 1)[0] + 1
-    lT = np.split(places, split)
-    peak = np.zeros(len(lT), dtype=int)
-    for i in range(len(lT)):
-        peak[i] = lT[i][-1]
-
-    # Find minima between arrivals
-    places = np.where(dD < 0)[0]
-    dplaces = places[1:] - places[:-1]
-    split = np.where(dplaces != 1)[0] + 1
-    lT = np.split(places, split)
-    interpeak = np.zeros(len(lT), dtype=int)
-    for i in range(len(lT)):
-        interpeak[i] = lT[i][-1]
-
-    # Control that interpeaks surround peaks:
-    if interpeak[0] > peak[0]:
-        interpeak = np.insert(interpeak, 0, 0)
-    if peak[-1] > interpeak[-1]:
-        interpeak = np.append(interpeak, D.size - 1)
-    assert interpeak.size == peak.size + 1
-
-    # Find amplitudes
-    amp = np.zeros(peak.size)
-    for i in range(amp.size):
-        amp[i] = np.sum(D[interpeak[i] : interpeak[i + 1]])
-    if interpeak[-1] < D.size:
-        amp[-1] = np.sum(D[interpeak[i] : interpeak[i + 1]])
-    else:
-        amp[-1] = np.sum(D[interpeak[i] :])
-    # Often, zero-mass peaks are found. Remove these.
-    ta = T[peak][amp > 0]
-    amp = amp[amp > 0]
-
-    return ta, amp
-
-
-def find_amp_ta_old(D, T, savgol=True, window_length=3, order=1):
-    """
-    Use: ta,amp = find_amp_ta(D, T, savgol=True, window_length=3, order=1)
-    Estimates arrival times and amplitudes
-    of the FPP from the deconvolved signal D.
-
-    Input:
-        D: result of deconvolution ............... numpy array
-        T: time array ............................ numpy array
-        dt: time step ............................ float
-        savgol: if True, use the savgol filter.
-                if False, use argrelmax. ......... bool, default True
-        window_length: passed to savgol_filter ... int >= 3, default 3
-        order: passed to argrelmax.
-               only used for savgol=False. ....... int >= 1, default 1
-
-    Output:
-        ta: estimated arrival times .............. numpy array
-        amp: estimated amplitudes ................ numpy array
-
-
-    To find ta, one of two methods is used.
-
-    If savgol=True, the derivative of D is computed
-    using a Savitzky-Golay of polynomial order 2.
-    The peaks are found from the zero-crossings of this derivative
-    in the negative direction.
-    Polynomial order 2 is chosen as it seems best for single peaks.
-    In the presence of noise, increasing window_length increases smoothing.
-
-    If savgol = False, the peaks are found using scipy.signal.argrelmax.
-    In this case, order is passed to argrelmax.
-
-    In order to take the entire mass of each peak of D into account,
-    the amplitudes are estimated by summing from one minima between two peaks
-    to the minima between the next two peaks:
-
-    ---min---peak----min----peak----min---
-
-    ---][--sum range-][--sum range--][----
-    """
-    import numpy as np
-    from scipy.signal import argrelmax, savgol_filter
-
-    dt = np.mean(np.diff(T))
-    if savgol:
-        # Find indices of arrival times
-        polyorder = 2
-        dD = savgol_filter(D, window_length, polyorder, deriv=1, delta=dt)
-
-        places = np.where(dD > 0)[0]
-        dplaces = places[1:] - places[:-1]
-        split = np.where(dplaces != 1)[0] + 1
-        lT = np.split(places, split)
-        peak = np.zeros(len(lT), dtype=int)
-        for i in range(len(lT)):
-            peak[i] = lT[i][-1]
-    else:
-        peak = argrelmax(D, order=order)[0]
-
-    # Find amplitudes
-    amp = np.zeros(peak.size)
-    interpeak = np.zeros(peak.size + 1, dtype=int)
-    for i in range(peak.size - 1):
-        interpeak[i + 1] = peak[i] + np.argmin(D[peak[i] + 1 : peak[i + 1]])
-    interpeak[-1] = D.size
-    for i in range(amp.size):
-        amp[i] = np.sum(D[interpeak[i] : interpeak[i + 1]])
-
-    return T[peak], amp
-
-
-def find_amp_ta_test(D, T, window_length=0, order=1):
-    """
-    Use: ta,amp = find_amp_ta_test(D, T, window_length=0, order=1)
-    Estimates arrival times and amplitudes of the FPP
-    from the deconvolved signal D.
-
-    Input:
-        D: result of deconvolution ............... numpy array
-        T: time array ............................ numpy array
-        dt: time step ............................ float
-        window_length: passed to savgol_filter.
-                        not used by default. ..... odd int,
-                                                    default 0 (no filtering)
-        order: passed to argrelmax. There should
-                be no need for modifying this. ... int >= 1, default 1
-
-    Output:
-        ta: estimated arrival times .............. numpy array
-        amp: estimated amplitudes ................ numpy array
-
-    A slightly different method for finding amplitudes and arrivals.
-    The peaks are estimated using a standard scipy.signal.argrelmax,
-    but we apply a smoothing by using a Savitzky-Golay filter of
-    polynomial order 2 before argrelmax is applied.
-    Polynomial order 2 is chosen as it seems best for single, positive definite
-    peaks. Anything higher gives spurious fluctuations.
-    In the presence of noise, increasing window_length increases smoothing.
-
-    In order to take the entire mass of each peak of D into account,
-    the amplitudes are estimated by summing from one minima between two peaks
-    to the minima between the next two peaks:
-
-    ---min---peak----min----peak----min---
-
-    ---][--sum range-][--sum range--][----
-    """
-    import numpy as np
-    from scipy.signal import argrelmax, savgol_filter
-    import warnings
-
-    # Pad D with zeros at ends in case there is a peak at the end points.
-    # This is neccesary as argrelmax does not take end points into account.
-    Dpad = np.zeros(D.size + 2 * order)
-    Dpad[order:-order] = D[:]
-
-    try:
-        Dpad = savgol_filter(Dpad, window_length, polyorder=2, mode="constant")
-    except ValueError:
-        if window_length:
-            warnings.warn("No filtering used. Check window_length.", UserWarning)
-
-    # Peaks are detected on the (possibly) filtered Dpad
-    peak = argrelmax(Dpad, order=order)[0]
-
-    amp = np.ones(peak.size)
-    interpeak = np.zeros(peak.size + 1, dtype=int)
-    for i in range(peak.size - 1):
-        interpeak[i + 1] = peak[i] + 1 + np.argmin(Dpad[peak[i] + 1 : peak[i + 1]])
-    interpeak[-1] = Dpad.size - 1
-
-    # As the filtering preserves the integral of the time series,
-    # the amplitudes are also calculated on the filtered Dpad.
-    for i in range(amp.size):
-        amp[i] = np.sum(Dpad[interpeak[i] : interpeak[i + 1]])
-
-    return T[peak - order], amp
+        return time_base[peak_location - 1], estimated_amplitudes
