@@ -37,9 +37,9 @@ def RL_gauss_deconvolve(
         scale_factor: Scale factor which is multiplied with b condition........ float > 0, default = 1
         gpu: Use GPU-accelerated version....................................... bool
     Output:
-        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np array
-        error: mean absolute difference between iterations .......... 1D np array
-    
+        result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np/cp array
+        error: normalized mean difference between iterations .................... 1D np/cp array
+
     WARNING:
     For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
     Do a check like the following before putting signal array into the 'signal' argument.
@@ -117,7 +117,7 @@ def RL_gauss_deconvolve(
         error[i] = xp.sum(
             (signal_temporary - fftconvolve(updated_result, kern_temporary, "same"))
             ** 2
-        )
+        ) / len(signal)
 
         current_result[:] = updated_result[:]
 
@@ -133,7 +133,7 @@ def three_point_maxima(deconv_result, time_base=None, **kwargs):
     """
     Find amplitudes and arrival times of the deconvolved signal
     using scipy.signal.find_peaks.
-    
+
     Use: Estimates arrival times and amplitudes of the FPP from the deconvolved signal.
     Input:
         deconv_result: result of deconvolution ............... numpy array
@@ -142,20 +142,20 @@ def three_point_maxima(deconv_result, time_base=None, **kwargs):
     Output:
         estimated_arrival_times: estimated location of arrivals ....... numpy array
         estimated_amplitudes: estimated amplitudes ................ numpy array
-        
-    If time_base is given, estimated_arrival_times are the arrival times in time_base. 
+
+    If time_base is given, estimated_arrival_times are the arrival times in time_base.
     If time_base is not given, ta are the peak locations in deconv_result.
-    
-    By default, this is a pure 3-point maxima. 
+
+    By default, this is a pure 3-point maxima.
     In the presence of noise, we suggest using one of the following
     keywords in order to select for the peaks:
         height: required height of peak
         prominence: required prominence of peak
             may require setting wlen as well, for large arrays.
-    
+
     In order to take the entire mass of each peak of deconv_result into account,
     the amplitudes are estimated by summing from one minima between two peaks
-    to the minima between the next two peaks. The value of the minima is 
+    to the minima between the next two peaks. The value of the minima is
     divided proportionally between the two peaks, according to their height.
     ---min---peak----min----peak----min---
     ---][--sum range-][--sum range--][----
