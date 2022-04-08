@@ -38,7 +38,7 @@ def RL_gauss_deconvolve(
         gpu: Use GPU-accelerated version....................................... bool
     Output:
         result: result array. NxM, where N=len(signal) and M=len(iteration_list)   np/cp array
-        error: mean relative difference between iterations .................... 1D np/cp array
+        error: normalized mean difference between iterations .................... 1D np/cp array
 
     WARNING:
     For estimating the pulse shape, you need to ensure you have an odd number of data points when generating synthetic data.
