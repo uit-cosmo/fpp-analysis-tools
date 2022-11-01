@@ -77,8 +77,8 @@ def joint_pdf(X, Y, N=64, pdfs=False):
 
     H, xedges, yedges = np.histogram2d(X, Y, N, normed=True)
     # Use midpoints, not edges
-    x = xedges[:-1] + 0.5 * (xedges[1:] - xedges[:-1])
-    y = yedges[:-1] + 0.5 * (yedges[1:] - yedges[:-1])
+    x = 0.5 * (xedges[1:] + xedges[:-1])
+    y = 0.5 * (yedges[1:] + yedges[:-1])
 
     if pdfs == False:
         return H, x, y
