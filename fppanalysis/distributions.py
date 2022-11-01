@@ -80,14 +80,12 @@ def joint_pdf(X, Y, N=64, pdfs=False):
     x = xedges[:-1] + 0.5 * (xedges[1:] - xedges[:-1])
     y = yedges[:-1] + 0.5 * (yedges[1:] - yedges[:-1])
 
-    # xx,yy=np.meshgrid(x,y, indexing = 'ij')
-    xx, yy = np.meshgrid(xedges, yedges, indexing="ij")
-    print
     if pdfs == False:
-        return H, xx, yy
-    elif pdfs == True:
-        Xpdf = simps(H, y, axis=1)
-        Xpdf = Xpdf / simps(Xpdf, x)
-        Ypdf = simps(H, x, axis=0)
-        Ypdf = Ypdf / simps(Ypdf, y)
-        return H, Xpdf, Ypdf, x, y, xx, yy
+        return H, x, y
+
+    Xpdf = simps(H, y, axis=1)
+    Xpdf = Xpdf / simps(Xpdf, x)
+    Ypdf = simps(H, x, axis=0)
+    Ypdf = Ypdf / simps(Ypdf, y)
+    
+    return H, Xpdf, Ypdf, x, y
