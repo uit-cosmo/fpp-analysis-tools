@@ -1,15 +1,17 @@
-def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
+def cond_av(S, T, smin=None, smax=None, Sref=None, delta=None, window=False, 
+            prominence=None, threshold = None, weight='amplitude'):
     """
     Use: cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False)
     Use the level crossing algorithm to compute the conditional average of
     a process.
-
     Inputs:
         S: Signal. Size N ................................. (1xN) np array
         T: Time base ...................................... (1xN) np array
         smin: Minimal peak amplitude
-              in units of rms-value above mean value. ..... float
-        smax: Maximal peak amplitude. ..................... float, def None
+              in units of rms-value above mean value. ..... Either float, 
+              None or (1xN) np array. def None
+        smax: Maximal peak amplitude. ..................... Either float, 
+        None or (1xN) np array. def None
         Sref: Reference signal.
               If None, S is the reference. ................ (1xN) np array,
                                                             def None
@@ -20,7 +22,22 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
                ............................................ float, def None
         window: If True, delta also gives the minimal distance between peaks.
                 ........................................... bool, def False
-
+        prominence: Minimal peak prominence in units
+                    of rms-value above mean value.......... Either a number, 
+                    None, an array matching x or a 2-element sequence of the 
+                    former. The first element is always interpreted as the 
+                    minimal and the second, if supplied, as the maximal required 
+                    prominence. def None
+        threshold: Required threshold of peaks, the vertical distance to its 
+                   neighboring samples. ................... Either a number, 
+                   None, an array matching x or a 2-element sequence of the 
+                   former. The first element is always interpreted as the 
+                   minimal and the second, if supplied, as the maximal required
+                   threshold.  def None
+        weight: Weighting to be used in the conditionally averaged signal. If
+                weight='amplitude' the amplitudes of each peak decides its 
+                weight in the average. If weight='equal' all peaks are 
+                weighted equally in the average............ str, def 'amplitude'
     Outputs:
         Svals: Signal values used in the conditional average.
                S with unused values set to nan. ........... (1xN) np array
@@ -31,76 +48,49 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
         wait: waiting times between peaks
     """
     import numpy as np
-
+    from scipy.signal import find_peaks
+    
+    if all(i is None for i in[smin, prominence]):
+        raise TypeError('Missing 1 required positional argument: \'smin\' '
+                        'or \'prominence\'')
+    
     if Sref is None:
         Sref = S
     assert len(Sref) == len(S) and len(S) == len(T)
 
     sgnl = (Sref - np.mean(Sref)) / np.std(Sref)
     dt = sum(np.diff(T)) / (len(T) - 1)
-
-    places = np.where(sgnl > smin)[0]
-    assert len(places) > 0, "No conditional events"
-    print("places to check:{}".format(len(places)), flush=True)
-    dplaces = np.diff(places)
-    split = np.where(dplaces != 1)[0]
-    # (+1 since dplaces is one ahead with respect to places)
-    lT = np.split(places, split + 1)
-
+    
+    #Estimating delta.
     if delta is None:
+        if smin is None:
+            tmpmin = prominence
+        else:
+            tmpmin = smin
+            
+        places = np.where(sgnl > tmpmin)[0]
+        dplaces = np.diff(places)
+        split = np.where(dplaces != 1)[0]
+        # (+1 since dplaces is one ahead with respect to places)
+        lT = np.split(places, split + 1)
         delta = len(sgnl) / len(lT) * dt
-    if smax is not None:
-        too_high = []
-        for i in range(len(lT)):
-            if max(sgnl[lT[i]]) > smax:
-                too_high.append(i)
-        removeset = set(too_high)
-        lT = [v for i, v in enumerate(lT) if i not in removeset]
-
+    
+    distance = None
+    # Ensure distance delta between peaks.
+    if window:
+        distance = int(delta / dt)
+        
+    if prominence is None:
+        prominence = smin / 4
+    
+    # Find peak indices.
+    gpl_array, _ = find_peaks(sgnl, height = [smin, smax], distance = distance,
+                              prominence = prominence, threshold = threshold)
+    
     # Use arange instead of linspace to guarantee 0 in the middle of the array.
     t_av = np.arange(-int(delta / (dt * 2)), int(delta / (dt * 2)) + 1) * dt
 
-    # diagnostics
-    lplmax = 0
-    lpldiff = 0
-    lplcount = 0
 
-    gpl_array = np.array([])
-    if window:
-        lT.sort(key=lambda t: max(sgnl[t]), reverse=True)
-
-    # Find local and global peak values
-    for i in range(len(lT)):
-        local_peak_loc = np.where(Sref[lT[i]] == max(Sref[lT[i]]))[0]
-
-        # Troubleshooting in case there are more than one unique peak
-        if len(local_peak_loc) > 1:
-            lplmax = max(lplmax, len(local_peak_loc))
-            lpldiff = max(lpldiff, local_peak_loc[-1] - local_peak_loc[0])
-            lplcount += 1
-            # Prefer the peak closest to the mean of the candidates
-            # (earliest time breaks ties)
-            local_peak_loc = local_peak_loc[
-                abs(local_peak_loc - np.mean(local_peak_loc)).argmin()
-            ]
-
-        gpl_array = np.append(gpl_array, local_peak_loc + lT[i][0])
-
-    # Ensure distance delta between peaks.
-    if window:
-        index = 0
-        while index < len(gpl_array):
-            t_to_close = np.where(
-                abs(gpl_array[index + 1 :] - gpl_array[index]) < int(delta / dt)
-            )[0] + (index + 1)
-            gpl_array = np.delete(gpl_array, t_to_close)
-            removeset = set(t_to_close)
-            lT = [v for i, v in enumerate(lT) if i not in removeset]
-            index += 1
-        lT.sort(key=lambda t: max(t))
-        gpl_array.sort()
-
-    gpl_array = gpl_array.astype(int)
     peaks = S[gpl_array]
     wait = np.append(np.array([T[0]]), T[gpl_array])
     wait = np.diff(wait)
@@ -111,9 +101,9 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
     badcount = 0
 
     t_half_len = int((len(t_av) - 1) / 2)
-    s_tmp = np.zeros([len(t_av), len(lT)])
+    s_tmp = np.zeros([len(t_av), len(gpl_array)])
 
-    for i in range(len(lT)):
+    for i in range(len(gpl_array)):
         global_peak_loc = gpl_array[i]
 
         # Find the average values and their variance
@@ -129,8 +119,10 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
             )
         if max(tmp_sn) != tmp_sn[t_half_len]:
             badcount += 1
-
+        
         s_tmp[:, i] = tmp_sn
+        if weight == 'equal':
+            s_tmp[:, i] /= tmp_sn[t_half_len]
     s_av = np.mean(s_tmp, axis=1)
 
     # The conditional variance of the conditional event f(t) is defined as
@@ -143,17 +135,6 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
     print("conditional events:{}".format(len(peaks)), flush=True)
     if badcount > 0:
         print("bursts where the recorded peak is not the largest:" + str(badcount))
-    if lplcount > 0:
-        print(
-            "There were problems locating unique peaks in {0} bursts, {1:.3f} of all bursts".format(
-                lplcount, lplcount / len(lT)
-            )
-        )
-        print(
-            "Largest number of peaks in burst:{0}\nLargest difference (data points) between peaks:{1}".format(
-                lplmax, lpldiff
-            )
-        )
-        print("In all cases, the first peak per burst was used.")
+
 
     return Svals, s_av, s_var, t_av, peaks, wait
