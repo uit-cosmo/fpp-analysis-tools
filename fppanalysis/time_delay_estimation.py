@@ -8,14 +8,13 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
        estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cutoff=0)
 
     Estimates the time delay distribution parameters for the pulses propagating from two measurement points.
+    This is done by optimizing the time delay distribution parameters such that the predicted cross-correlation,
+    given by the convolution of the autocorrelation and the time delay distribution, best fits the observed cross-
+    correlation.
+
     Time series x, y, corresponding to each point measurement must be provided. The time delay distribution
     is assumed to follow a family distribution given by the argument distribution. Plots relevant autocorrelation
     and cross-correlation functions if a matplotlib ax is provided.
-
-    Wrapper function for run_mean(), computes running mean and rms of S.
-    To compute the running standard deviation of S, the running mean is
-    subtracted from the signal.
-    The running rms divides by window, not (window-1).
 
     Input:
         x: Time series ...................... (N,) np array
@@ -25,9 +24,14 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
         understand the underlying principles of the optimization, the plots are not suitable for scientific publication
         .
         plot: String, if "full", plots more stuff.
-        min_cutoff: I don't remember.
+        min_cutoff: An upper bound for the cross-correlation maxima. Usage: If working with short time series
+        or noisy data, it can be helpful for the method to set this value to an upper bound for the time that
+        maximizes the cross-correlation, that is, a time such that you are sure that the cross-correlation is
+        maximized before it.
     Output:
-        avg: Average delay time.
+        avg: Average delay time
+        arg: Possible distribution shape parameter. None if distribution is shapeless
+        scale: Distribution scale parameter.
     """
     import numpy as np
     from scipy.stats import uniform, norm
@@ -63,54 +67,59 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
             return distribution.stats(scale=scale, loc=0, moments="m")
 
     def gamma_error(params):
-        pdf = get_pdf(params, tauR)
-        res = fftconvolve(autocorrelation, pdf, "same") * dt
+        pdf = get_pdf(params, ccf_times)
+        res = fftconvolve(est_acf, pdf, "same") * dt
         res /= max(res)
-        return np.sum((res - R) ** 2)
+        return np.sum((res - est_ccf) ** 2)
 
     def get_params():
         if distribution in [uniform, norm]:
             return [1, 1]
         return np.ones(1 + distribution.numargs)
 
-    # We cut the cross correlation in the middle half to avoid noise near the ends
-
     parameters = get_params()
 
-    tauR, R = cf.corr_fun(x, y, dt=dt, biased=False)
-    _, autocorrelation = cf.corr_fun(x, x, dt=dt, biased=False)
+    ccf_times, est_ccf = cf.corr_fun(x, y, dt=dt, biased=False)
+    _, est_acf = cf.corr_fun(x, x, dt=dt, biased=False)
 
-    R = R[np.abs(tauR) < max(tauR) / 2]
-    autocorrelation = autocorrelation[np.abs(tauR) < max(tauR) / 2]
-    tauR = tauR[np.abs(tauR) < max(tauR) / 2]
+    # We cut the cross correlation in the middle half to avoid noise near the ends
+    est_ccf = est_ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    est_acf = est_acf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
 
-    max_cross_corr = max(tauR[np.argmax(R)], min_cutoff)
+    max_cross_corr = max(ccf_times[np.argmax(est_ccf)], min_cutoff)
     parameters[0] = max_cross_corr
+    # Time domain does not need to be full signal. This seems to be a good compromise.
     domain_cutoff = max_cross_corr * 100
 
-    domain = np.abs(tauR) < domain_cutoff
-    tauR = tauR[domain]
-    R = R[domain]
-    autocorrelation = autocorrelation[domain]
-    R = R / max(R)
+    domain = np.abs(ccf_times) < domain_cutoff
+    ccf_times = ccf_times[domain]
+    est_ccf = est_ccf[domain]
+    est_acf = est_acf[domain]
+    est_ccf = est_ccf / max(est_ccf)
 
     minimization = minimize(
         gamma_error, parameters, method="Nelder-Mead", options={"maxiter": 10000}
     )
     if not minimization.success:
         print("Optimization failed!!!")
-    arg = minimization.x[:-1]
+
+    num_args = len(minimization.x)
+    arg = minimization.x[:-1] if num_args > 1 else None
     scale = minimization.x[0]
     avg = get_average(minimization.x)
 
     if ax is not None:
         ax.plot(
-            tauR, R, label=r"$\wh{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$", color="blue"
+            ccf_times,
+            est_ccf,
+            label=r"$\wh{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$",
+            color="blue",
         )
-        convo = fftconvolve(autocorrelation, get_pdf(minimization.x, tauR), "same")
+        convo = fftconvolve(est_acf, get_pdf(minimization.x, ccf_times), "same")
         convo /= max(convo)
         ax.plot(
-            tauR,
+            ccf_times,
             convo,
             label=r"$\ave{\wh{\rho_\phi} \left( \frac{ r-d } {\tau} \right)}_d$",
             color="red",
@@ -137,8 +146,8 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
                 height=0.8,  # height : 1 inch
                 loc=4,
             )
-            axin.plot(tauR, get_pdf(minimization.x, tauR))
+            axin.plot(ccf_times, get_pdf(minimization.x, ccf_times))
             axin.set_xlim(-max_cross_corr, 5 * max_cross_corr)
             axin.set_title("Params: {}".format(minimization.x), fontsize=8)
 
-    return avg
+    return avg, arg, scale
