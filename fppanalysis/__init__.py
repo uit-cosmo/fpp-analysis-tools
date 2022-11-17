@@ -10,6 +10,6 @@ from .conditional_averaging_2d import condavg_2d
 from .peak_detection import detect_peaks_1d
 from .random_phase import *
 from .binning_container import *
-from .parameter_estimation_ECF import *
+from .time_delay_estimation import estimate_delays
 
 __version__ = "0.1.2"
