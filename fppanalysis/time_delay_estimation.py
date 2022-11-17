@@ -1,8 +1,107 @@
-from scipy.stats import gamma
-import correlation_function as cf
+import numpy as np
+from scipy.stats import gamma, rv_continuous
+import fppanalysis.correlation_function as cf
+import matplotlib
+from scipy.stats import uniform, norm
+from scipy.signal import fftconvolve
 
 
-def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cutoff=0):
+def get_average(params: np.ndarray, distribution: rv_continuous):
+    dist_scale = params[0]
+    if distribution == uniform:
+        return params[0]
+    if distribution == norm:
+        return params[0]
+    if distribution.numargs > 0:
+        return distribution.stats(params[1], scale=dist_scale, loc=0, moments="m")
+    else:
+        return distribution.stats(scale=dist_scale, loc=0, moments="m")
+
+
+def get_pdf(params: np.ndarray, times: np.ndarray, distribution: rv_continuous):
+    if distribution == uniform:
+        pdf = np.zeros(len(times))
+        shape = 1 / (1 + params[1] ** 2)
+        low = params[0] * (1 - shape)
+        high = params[0] * (1 + shape)
+        pdf[np.logical_and(times < high, times >= low)] = 1 / (high - low)
+        return pdf
+    if distribution == norm:
+        return distribution.pdf(times, loc=params[0], scale=params[1])
+    if distribution.numargs > 0:
+        pdf = distribution.pdf(times, params[1], loc=0, scale=params[0])
+        if distribution == gamma and params[1] < 1:
+            pdf[times == 0] = 0
+        return pdf
+    else:
+        return distribution.pdf(times, loc=0, scale=params[0])
+
+
+def plot_optimization(
+    axe: matplotlib.axis,
+    times: np.ndarray,
+    est_ccf: np.ndarray,
+    est_acf: np.ndarray,
+    params: np.ndarray,
+    distribution: rv_continuous,
+    xmin: float,
+    xmax: float,
+):
+    axe.plot(
+        times,
+        est_ccf,
+        label=r"$\wh{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$",
+        color="blue",
+    )
+    convo = fftconvolve(est_acf, get_pdf(params, times, distribution), "same")
+    convo /= max(convo)
+    axe.plot(
+        times,
+        convo,
+        label=r"$\ave{\wh{\rho_\phi} \left( \frac{ r-d } {\tau} \right)}_d$",
+        color="red",
+    )
+
+    axe.legend()
+    axe.grid(True)
+    axe.set_xlim(xmin, xmax)
+    axe.set_ylim(0, 1.2)
+
+    axe.set_xlabel(r"$r$")
+
+
+def plot_pdf_function(
+    axe: matplotlib.axis,
+    distribution: rv_continuous,
+    error: float,
+    parameters: np.ndarray,
+    xmin: float,
+    xmax: float,
+    times: np.ndarray,
+):
+    axe.set_title("Distribution: {} Error {:.2g}".format(distribution.name, error))
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+    axin = inset_axes(
+        axe,
+        width="20%",  # width = 30% of parent_bbox
+        height=0.8,  # height : 1 inch
+        loc=4,
+    )
+    axin.plot(times, get_pdf(parameters, times, distribution))
+    axin.set_xlim(xmin, xmax)
+    axin.set_title("Params: {}".format(parameters), fontsize=8)
+
+
+def estimate_delays(
+    x: np.ndarray,
+    y: np.ndarray,
+    dt: float,
+    distribution: rv_continuous = gamma,
+    ax: matplotlib.axis = None,
+    plot_pdf: bool = True,
+    min_cutoff: float = 0,
+):
     """
     Use:
        estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cutoff=0)
@@ -23,7 +122,7 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
         ax: Optional, if a matplotlib.pyplot.axis is provided, relevant plots will be plotted. These are meant to help
         understand the underlying principles of the optimization, the plots are not suitable for scientific publication
         .
-        plot: String, if "full", plots more stuff.
+        plot_pdf: Bool, if True, adds an inset plot of the time delay distribution function.
         min_cutoff: An upper bound for the cross-correlation maxima. Usage: If working with short time series
         or noisy data, it can be helpful for the method to set this value to an upper bound for the time that
         maximizes the cross-correlation, that is, a time such that you are sure that the cross-correlation is
@@ -33,51 +132,12 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
         arg: Possible distribution shape parameter. None if distribution is shapeless
         scale: Distribution scale parameter.
     """
-    import numpy as np
-    from scipy.stats import uniform, norm
-    from scipy.signal import fftconvolve
     from scipy.optimize import minimize
 
-    def get_pdf(params, tauR):
-        if distribution == uniform:
-            pdf = np.zeros(len(tauR))
-            shape = 1 / (1 + params[1] ** 2)
-            low = params[0] * (1 - shape)
-            high = params[0] * (1 + shape)
-            pdf[np.logical_and(tauR < high, tauR >= low)] = 1 / (high - low)
-            return pdf
-        if distribution == norm:
-            return distribution.pdf(tauR, loc=params[0], scale=params[1])
-        if distribution.numargs > 0:
-            pdf = distribution.pdf(tauR, params[1], loc=0, scale=params[0])
-            if distribution == gamma and params[1] < 1:
-                pdf[tauR == 0] = 0
-            return pdf
-        else:
-            return distribution.pdf(tauR, loc=0, scale=params[0])
-
-    def get_average(params):
-        if distribution == uniform:
-            return params[0]
-        if distribution == norm:
-            return params[0]
-        if distribution.numargs > 0:
-            return distribution.stats(params[1], scale=scale, loc=0, moments="m")
-        else:
-            return distribution.stats(scale=scale, loc=0, moments="m")
-
-    def gamma_error(params):
-        pdf = get_pdf(params, ccf_times)
-        res = fftconvolve(est_acf, pdf, "same") * dt
-        res /= max(res)
-        return np.sum((res - est_ccf) ** 2)
-
-    def get_params():
-        if distribution in [uniform, norm]:
-            return [1, 1]
-        return np.ones(1 + distribution.numargs)
-
-    parameters = get_params()
+    # Initialize distribution parameters. Uniform and norm require two parameters.
+    parameters = (
+        [1, 1] if distribution in [uniform, norm] else np.ones(1 + distribution.numargs)
+    )
 
     ccf_times, est_ccf = cf.corr_fun(x, y, dt=dt, biased=False)
     _, est_acf = cf.corr_fun(x, x, dt=dt, biased=False)
@@ -98,8 +158,14 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
     est_acf = est_acf[domain]
     est_ccf = est_ccf / max(est_ccf)
 
+    def get_error(params):
+        pdf = get_pdf(params, ccf_times, distribution)
+        res = fftconvolve(est_acf, pdf, "same") * dt
+        res /= max(res)
+        return np.sum((res - est_ccf) ** 2)
+
     minimization = minimize(
-        gamma_error, parameters, method="Nelder-Mead", options={"maxiter": 10000}
+        get_error, parameters, method="Nelder-Mead", options={"maxiter": 10000}
     )
     if not minimization.success:
         print("Optimization failed!!!")
@@ -107,47 +173,28 @@ def estimate_delays(x, y, dt, distribution=gamma, ax=None, plot="full", min_cuto
     num_args = len(minimization.x)
     arg = minimization.x[:-1] if num_args > 1 else None
     scale = minimization.x[0]
-    avg = get_average(minimization.x)
+    avg = get_average(minimization.x, distribution)
 
     if ax is not None:
-        ax.plot(
+        plot_optimization(
+            ax,
             ccf_times,
             est_ccf,
-            label=r"$\wh{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$",
-            color="blue",
+            est_acf,
+            minimization.x,
+            distribution,
+            xmin=-10 * max_cross_corr,
+            xmax=20 * max_cross_corr,
         )
-        convo = fftconvolve(est_acf, get_pdf(minimization.x, ccf_times), "same")
-        convo /= max(convo)
-        ax.plot(
-            ccf_times,
-            convo,
-            label=r"$\ave{\wh{\rho_\phi} \left( \frac{ r-d } {\tau} \right)}_d$",
-            color="red",
-        )
-
-        ax.legend()
-        ax.grid(True)
-        ax.set_xlim(-10 * max_cross_corr, 20 * max_cross_corr)
-        ax.set_ylim(0, 1.2)
-
-        ax.set_xlabel(r"$r$")
-
-        if plot == "full":
-            ax.set_title(
-                "Distribution: {} Error {:.2g}".format(
-                    distribution.name, minimization.fun
-                )
-            )
-            from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
-            axin = inset_axes(
+        if plot_pdf:
+            plot_pdf_function(
                 ax,
-                width="20%",  # width = 30% of parent_bbox
-                height=0.8,  # height : 1 inch
-                loc=4,
+                distribution,
+                minimization.fun,
+                minimization.x,
+                xmin=-max_cross_corr,
+                xmax=5 * max_cross_corr,
+                times=ccf_times,
             )
-            axin.plot(ccf_times, get_pdf(minimization.x, ccf_times))
-            axin.set_xlim(-max_cross_corr, 5 * max_cross_corr)
-            axin.set_title("Params: {}".format(minimization.x), fontsize=8)
 
     return avg, arg, scale
