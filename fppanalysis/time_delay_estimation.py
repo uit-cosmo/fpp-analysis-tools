@@ -129,8 +129,8 @@ def estimate_delays(
         maximized before it.
     Output:
         avg: Average delay time
-        arg: Possible distribution shape parameter. None if distribution is shapeless
-        scale: Distribution scale parameter.
+        params: Array of parameters that optimizes the time delay distribution function. In general params[0] will
+        be the scale of the distribution, and params[1], if present, will give the shape of the distribution.
     """
     from scipy.optimize import minimize
 
@@ -170,9 +170,6 @@ def estimate_delays(
     if not minimization.success:
         print("Optimization failed!!!")
 
-    num_args = len(minimization.x)
-    arg = minimization.x[:-1] if num_args > 1 else None
-    scale = minimization.x[0]
     avg = get_average(minimization.x, distribution)
 
     if ax is not None:
@@ -197,7 +194,7 @@ def estimate_delays(
                 times=ccf_times,
             )
 
-    return avg, arg, scale
+    return avg, minimization.x
 
 
 def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
