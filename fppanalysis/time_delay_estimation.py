@@ -117,7 +117,7 @@ def estimate_delays(
 
     Input:
         x: Time series ...................... (N,) np array
-        x: Time series ...................... (N,) np array
+        y: Time series ...................... (N,) np array
         distribution: Assumed distribution .... class implementing scipy.stats.rv_continuous
         ax: Optional, if a matplotlib.pyplot.axis is provided, relevant plots will be plotted. These are meant to help
         understand the underlying principles of the optimization, the plots are not suitable for scientific publication
@@ -129,8 +129,8 @@ def estimate_delays(
         maximized before it.
     Output:
         avg: Average delay time
-        arg: Possible distribution shape parameter. None if distribution is shapeless
-        scale: Distribution scale parameter.
+        params: Array of parameters that optimizes the time delay distribution function. In general params[0] will
+        be the scale of the distribution, and params[1], if present, will give the shape of the distribution.
     """
     from scipy.optimize import minimize
 
@@ -170,9 +170,6 @@ def estimate_delays(
     if not minimization.success:
         print("Optimization failed!!!")
 
-    num_args = len(minimization.x)
-    arg = minimization.x[:-1] if num_args > 1 else None
-    scale = minimization.x[0]
     avg = get_average(minimization.x, distribution)
 
     if ax is not None:
@@ -197,4 +194,65 @@ def estimate_delays(
                 times=ccf_times,
             )
 
-    return avg, arg, scale
+    return avg, minimization.x
+
+
+def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
+    """
+    Estimates the average time delay between to signals by finding the time lag that maximizies the
+    cross-correlation function.
+    """
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    return ccf_times[np.argmax(ccf)]
+
+
+def get_avg_velocity_from_time_delays(
+    separation: float, params: np.ndarray, distribution: rv_continuous
+):
+    """
+    Computes the average velocity corresponding to a given time delay distribution
+    Input:
+        separation: spatial separation between measurement points
+        velocities: array of velocities upon which the probability density function is evaluated
+        params: array of distribution parameters describing the time delay distribution
+        distribution: Assumed time delay distribution .... class implementing scipy.stats.rv_continuous
+    Output:
+        Average velocity
+
+    """
+    from scipy.integrate import quad
+
+    return quad(
+        lambda td: separation / td * get_pdf(params, td, distribution), 0, np.infty
+    )[0]
+
+
+def get_velocity_pdf_from_time_delays(
+    separation: float,
+    velocities: np.ndarray,
+    params: np.ndarray,
+    distribution: rv_continuous,
+):
+    """
+    Use:
+       get_velocity_pdf_from_time_delays(separation, velocities, params, distribution)
+
+    Returns the velocity probability density function given the time delay distribution described by the argument
+    distribution with parameters params.
+
+    Input:
+        separation: spatial separation between measurement points
+        velocities: array of velocities upon which the probability density function is evaluated
+        params: array of distribution parameters describing the time delay distribution
+        distribution: Assumed time delay distribution .... class implementing scipy.stats.rv_continuous
+    Output:
+        array with the probability density function of the velocities.
+    """
+    assert np.all(velocities > 0), "Velocities should be positive"
+    return (
+        get_pdf(params, separation / velocities, distribution)
+        * separation
+        / (velocities**2)
+    )
