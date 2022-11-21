@@ -215,7 +215,6 @@ def get_avg_velocity_from_time_delays(
     Computes the average velocity corresponding to a given time delay distribution
     Input:
         separation: spatial separation between measurement points
-        velocities: array of velocities upon which the probability density function is evaluated
         params: array of distribution parameters describing the time delay distribution
         distribution: Assumed time delay distribution .... class implementing scipy.stats.rv_continuous
     Output:
