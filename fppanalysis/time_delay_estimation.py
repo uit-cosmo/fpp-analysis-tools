@@ -50,7 +50,7 @@ def plot_optimization(
     axe.plot(
         times,
         est_ccf,
-        label=r"$\wh{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$",
+        label=r"$\widehat{R_{\tilde{\Phi}, \tilde{\Psi}}}(r)$",
         color="blue",
     )
     convo = fftconvolve(est_acf, get_pdf(params, times, distribution), "same")
@@ -58,7 +58,7 @@ def plot_optimization(
     axe.plot(
         times,
         convo,
-        label=r"$\ave{\wh{\rho_\phi} \left( \frac{ r-d } {\tau} \right)}_d$",
+        label=r"$\left<\widehat{\rho_\phi} \left( \frac{ r-d } {\tau} \right)\right>_d$",
         color="red",
     )
 
