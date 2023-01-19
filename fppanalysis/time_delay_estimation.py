@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
-import matplotlib
+import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
 
@@ -38,7 +38,7 @@ def get_pdf(params: np.ndarray, times: np.ndarray, distribution: rv_continuous):
 
 
 def plot_optimization(
-    axe: matplotlib.axis,
+    axe: plt.axis,
     times: np.ndarray,
     est_ccf: np.ndarray,
     est_acf: np.ndarray,
@@ -71,7 +71,7 @@ def plot_optimization(
 
 
 def plot_pdf_function(
-    axe: matplotlib.axis,
+    axe: plt.axis,
     distribution: rv_continuous,
     error: float,
     parameters: np.ndarray,
@@ -98,7 +98,7 @@ def estimate_delays(
     y: np.ndarray,
     dt: float,
     distribution: rv_continuous = gamma,
-    ax: matplotlib.axis = None,
+    ax: plt.axis = None,
     plot_pdf: bool = True,
     min_cutoff: float = 0,
 ):
