@@ -17,4 +17,4 @@ from .time_delay_estimation import (
     get_velocity_pdf_from_time_delays,
 )
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
