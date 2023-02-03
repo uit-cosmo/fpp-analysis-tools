@@ -11,10 +11,15 @@ def rand_phase(p):
     return pf - np.pi
 
 
-def signal_rand_phase(S):
-    # Returns a signal with the same power spectrum as S
-    # but random phases.
-    # Assumes S real.
+def signal_rand_phase(S: np.ndarray):
+    """
+    Randomize the phases of a signal S,
+    returning a signal with the same power spectral density
+    but (close to) normally distributed signal values.
+
+    Silently assumes a real signal S.
+    """
+
     F = np.fft.rfft(S)
 
     pf = rand_phase(np.angle(F))
