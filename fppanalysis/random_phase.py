@@ -1,21 +1,6 @@
 import numpy as np
 from typing import Optional
 
-
-def rand_phase(p):
-    """
-    There is no reason to use this function.
-
-    """
-    # This assumes -pi<p<pi.
-    # Move p to 0<p<2pi and add random phase
-    pf = p + np.pi + np.random.uniform(0, 2 * np.pi, p.size)
-    # Move phases back into 0<pf<2pi
-    pf[pf > 2 * np.pi] -= 2 * np.pi
-    # Move pf to -pi<pf<pi
-    return pf - np.pi
-
-
 def signal_rand_phase(S: np.ndarray, seed: Optional[int] = None) -> np.ndarray:
     """
     Randomize the phases of a signal S,
