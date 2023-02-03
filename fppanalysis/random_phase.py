@@ -1,7 +1,12 @@
 import numpy as np
+from typing import Optional
 
 
 def rand_phase(p):
+    """
+    There is no reason to use this function.
+
+    """
     # This assumes -pi<p<pi.
     # Move p to 0<p<2pi and add random phase
     pf = p + np.pi + np.random.uniform(0, 2 * np.pi, p.size)
@@ -11,7 +16,7 @@ def rand_phase(p):
     return pf - np.pi
 
 
-def signal_rand_phase(S: np.ndarray):
+def signal_rand_phase(S: np.ndarray, seed: Optional[int] = None) -> np.ndarray:
     """
     Randomize the phases of a signal S,
     returning a signal with the same power spectral density
@@ -22,10 +27,11 @@ def signal_rand_phase(S: np.ndarray):
 
     F = np.fft.rfft(S)
 
-    pf = rand_phase(np.angle(F))
+    rng = np.random.default_rng(seed)
+    pf = rng.uniform(-np.pi,np.pi,size=F.size) 
     # See np.fft.rfft: The zero frequency must be real,
-    # as must the last freqency if there is an even number
-    # of samples.
+    # as must the last freqency 
+    # if there is an even number of samples.
     pf[0] = 0
     if not S.size%2:
         pf[-1] = 0
