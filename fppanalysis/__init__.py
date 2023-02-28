@@ -16,5 +16,10 @@ from .time_delay_estimation import (
     get_avg_velocity_from_time_delays,
     get_velocity_pdf_from_time_delays,
 )
+from .two_dim_velocity_estimates import (
+    get_2d_velocities_from_time_delays,
+    estimate_velocities_for_pixel,
+    estimate_velocity_field
+)
 
 __version__ = "0.1.4"
