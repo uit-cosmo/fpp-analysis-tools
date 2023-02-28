@@ -3,7 +3,7 @@ import numpy as np
 
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
-  """
+    """
   Estimates radial and poloidal velocities given the input parameters:
   Input:
        delta_tx Estimation of the time delay between radially separated points.
@@ -15,23 +15,23 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
        vx Radial velocity
        vy Poloidal velocity
   """
-  if delta_tx == 0:
-    return 0, delta_y/delta_ty
-  if delta_ty == 0:
-    return delta_x/delta_tx, 0
-  fx = delta_x/delta_tx
-  fy = delta_y/delta_ty
-  return fx/(1+(fx/fy)**2), fy/(1+(fy/fx)**2)
+    if delta_tx == 0:
+        return 0, delta_y / delta_ty
+    if delta_ty == 0:
+        return delta_x / delta_tx, 0
+    fx = delta_x / delta_tx
+    fy = delta_y / delta_ty
+    return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
 
 
 def get_rz(x, y, ds):
-  # Sajidah's format
-  if hasattr(ds, "time"):
-    return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
-  # 2d code
-  if hasattr(ds, "t"):
-    return ds.x.isel(x=x, y=y).values, ds.y.isel(x=x, y=y).values
-  raise "Unknown format"
+    # Sajidah's format
+    if hasattr(ds, "time"):
+        return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
+    # 2d code
+    if hasattr(ds, "t"):
+        return ds.x.isel(x=x, y=y).values, ds.y.isel(x=x, y=y).values
+    raise "Unknown format"
 
 
 def get_rz_full(ds):
@@ -133,7 +133,8 @@ def estimate_velocity_field(ds):
             try:
                 vx[i, j], vy[i, j] = estimate_velocities_for_pixel(i, j, ds)
             except:
-                print("Issues estimating velocity for pixel", i, j)
+                print("Issues estimating velocity for pixel", i, j,
+                      "Run estimate_velocities_for_pixel(i, j, ds) to get a detailed error stacktrace")
 
     vx[np.isnan(vx) | np.isinf(vx)] = 0
     vy[np.isnan(vy) | np.isinf(vy)] = 0
