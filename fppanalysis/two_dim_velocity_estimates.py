@@ -113,7 +113,7 @@ def estimate_velocity_field(ds):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
-    (ask Juan). For each pixel, the velocities are estimated using the given pixel, and two neighbour
+    the 2D filament model. For each pixel, the velocities are estimated using the given pixel, and two neighbour
     pixels: the right neighbour and the down neighbour. The return objects are matrices of the size of the
     GPI grid, from which the velocity field can be easily plotted via f.e matplotlib.quiver.
 
