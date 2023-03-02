@@ -4,17 +4,17 @@ import numpy as np
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     """
-  Estimates radial and poloidal velocities given the input parameters:
-  Input:
-       delta_tx Estimation of the time delay between radially separated points.
-       delta_ty Estimation of the time delay between poloidally separated points.
-       delta_x Spatial separation between radially separated points.
-       delta_y Spatial separation between poloidally separated points.
+    Estimates radial and poloidal velocities given the input parameters:
+    Input:
+         delta_tx Estimation of the time delay between radially separated points.
+         delta_ty Estimation of the time delay between poloidally separated points.
+         delta_x Spatial separation between radially separated points.
+         delta_y Spatial separation between poloidally separated points.
 
-  Returns:
-       vx Radial velocity
-       vy Poloidal velocity
-  """
+    Returns:
+         vx Radial velocity
+         vy Poloidal velocity
+    """
     if delta_tx == 0:
         return 0, delta_y / delta_ty
     if delta_ty == 0:
@@ -30,7 +30,7 @@ def get_rz(x, y, ds):
         return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
     # 2d code
     if hasattr(ds, "t"):
-        return ds.x.isel(x=x, y=y).values, ds.y.isel(x=x, y=y).values
+        return ds.x.isel(x=x).values, ds.y.isel(y=y).values
     raise "Unknown format"
 
 
@@ -54,23 +54,41 @@ def get_rz_full(ds):
 def get_signal(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).dropna(dim="time", how="any")['frames'].values
+        return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
     # 2d code
     if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).dropna(dim="t", how="any")['n'].values
+        return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
     raise "Unknown format"
 
 
 def get_dt(ds):
     # Sajidah's format
     if hasattr(ds, "time"):
-        times = ds['time']
+        times = ds["time"]
         return times[1].values - times[0].values
     # 2d code
     if hasattr(ds, "t"):
-        times = ds['t']
+        times = ds["t"]
         return times[1].values - times[0].values
     raise "Unknown format"
+
+
+def estimate_velocities_given_points(p0, p1, p2, ds):
+    dt = get_dt(ds)
+    r0, z0 = get_rz(p0[0], p0[1], ds)
+    r1, z1 = get_rz(p1[0], p1[1], ds)
+    r2, z2 = get_rz(p2[0], p2[1], ds)
+    signal0 = get_signal(p0[0], p0[1], ds)
+    signal1 = get_signal(p1[0], p1[1], ds)
+    signal2 = get_signal(p2[0], p2[1], ds)
+
+    if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
+        return 0, 0
+
+    delta_tz = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
+    delta_tx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
+
+    return get_2d_velocities_from_time_delays(delta_tx, delta_tz, r1 - r0, z2 - z0)
 
 
 def estimate_velocities_for_pixel(x, y, ds):
@@ -83,30 +101,7 @@ def estimate_velocities_for_pixel(x, y, ds):
         vx Radial velocity
         vy Poloidal velocity
     """
-    x_down, y_down = x, y - 1
-    x_right, y_right = x + 1, y
-    dt = get_dt(ds)
-
-    R0, Z0 = get_rz(x, y, ds)
-    R_right, Z_right = get_rz(x_right, y_right, ds)
-    R_down, Z_down = get_rz(x_down, y_down, ds)
-    frames_0 = get_signal(x, y, ds)
-    frames_right = get_signal(x_right, y_right, ds)
-    frames_down = get_signal(x_down, y_down, ds)
-    if len(frames_0) == 0 or len(frames_right) == 0 or len(frames_down) == 0:
-        return 0, 0
-
-    delta_vert = abs(Z0 - Z_down)
-    delta_tvert = tde.estimate_time_delay_ccmax(x=frames_0, y=frames_down, dt=dt)
-    if Z0 < Z_down:
-        delta_tvert = -delta_tvert
-
-    delta_hor = abs(R_right - R0)
-    delta_thor = tde.estimate_time_delay_ccmax(x=frames_right, y=frames_0, dt=dt)
-
-    vx, vy = get_2d_velocities_from_time_delays(delta_thor, delta_tvert, delta_hor, delta_vert)
-
-    return vx, vy
+    return estimate_velocities_given_points((x, y), (x + 1, y), (x, y - 1), ds)
 
 
 def estimate_velocity_field(ds):
@@ -133,8 +128,12 @@ def estimate_velocity_field(ds):
             try:
                 vx[i, j], vy[i, j] = estimate_velocities_for_pixel(i, j, ds)
             except:
-                print("Issues estimating velocity for pixel", i, j,
-                      "Run estimate_velocities_for_pixel(i, j, ds) to get a detailed error stacktrace")
+                print(
+                    "Issues estimating velocity for pixel",
+                    i,
+                    j,
+                    "Run estimate_velocities_for_pixel(i, j, ds) to get a detailed error stacktrace",
+                )
 
     vx[np.isnan(vx) | np.isinf(vx)] = 0
     vy[np.isnan(vy) | np.isinf(vy)] = 0
