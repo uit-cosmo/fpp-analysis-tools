@@ -91,12 +91,16 @@ def estimate_velocities_given_points(p0, p1, p2, ds):
     return get_2d_velocities_from_time_delays(delta_tx, delta_tz, r1 - r0, z2 - z0)
 
 
+def is_within_boundaries(p, ds):
+    return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
+
+
 def estimate_velocities_for_pixel(x, y, ds):
-    """
-    Estimates radial and poloidal velocity for a pixel with indexes x,y using all four possible combinations of nearest neighbour pixels
-    (x-1, y), (x, y+1), (x+1, y) and (x, y-1). It assumes such coordinates are accesible. Deadpixels (stored as np.nan arrays) are ignored.
-     Time delay estimation is performed by maximizing the cross-
-    correlation function.
+    """Estimates radial and poloidal velocity for a pixel with indexes x,y
+    using all four possible combinations of nearest neighbour pixels (x-1, y),
+    (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
+    ignored. Pixels outside the coordinate domain are ignored. Time delay
+    estimation is performed by maximizing the cross- correlation function.
 
     Returns:
         vx Radial velocity
@@ -108,9 +112,13 @@ def estimate_velocities_for_pixel(x, y, ds):
     results = [
         estimate_velocities_given_points((x, y), px, py, ds)
         for px in h_neighbors
+        if is_within_boundaries(px, ds)
         for py in v_neighbors
+        if is_within_boundaries(py, ds)
     ]
     results = [r for r in results if r is not None]
+    if len(results) == 0:  # If (x,y) is dead we cannot estimate
+        return None, None
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     return mean_vx, mean_vy
@@ -135,8 +143,8 @@ def estimate_velocity_field(ds):
     vy = np.zeros(shape=shape)
     R, Z = get_rz_full(ds)
 
-    for i in range(0, shape[0] - 1):
-        for j in range(1, shape[1]):
+    for i in range(0, shape[0]):
+        for j in range(0, shape[1]):
             try:
                 vx[i, j], vy[i, j] = estimate_velocities_for_pixel(i, j, ds)
             except:
