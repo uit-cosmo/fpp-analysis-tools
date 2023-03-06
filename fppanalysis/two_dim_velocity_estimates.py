@@ -83,7 +83,7 @@ def estimate_velocities_given_points(p0, p1, p2, ds):
     signal2 = get_signal(p2[0], p2[1], ds)
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
-        return 0, 0
+        return None
 
     delta_tz = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
     delta_tx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
@@ -93,15 +93,27 @@ def estimate_velocities_given_points(p0, p1, p2, ds):
 
 def estimate_velocities_for_pixel(x, y, ds):
     """
-    Estimates radial and poloidal velocity for a pixel with indexes x,y using the pixels located
-    at (x,y), (x+1, y) and (x, y-1). Time delay estimation is performed by maximizing the cross-
+    Estimates radial and poloidal velocity for a pixel with indexes x,y using all four possible combinations of nearest neighbour pixels
+    (x-1, y), (x, y+1), (x+1, y) and (x, y-1). It assumes such coordinates are accesible. Deadpixels (stored as np.nan arrays) are ignored.
+     Time delay estimation is performed by maximizing the cross-
     correlation function.
 
     Returns:
         vx Radial velocity
         vy Poloidal velocity
     """
-    return estimate_velocities_given_points((x, y), (x + 1, y), (x, y - 1), ds)
+
+    h_neighbors = [(x - 1, y), (x + 1, y)]
+    v_neighbors = [(x, y - 1), (x, y + 1)]
+    results = [
+        estimate_velocities_given_points((x, y), px, py, ds)
+        for px in h_neighbors
+        for py in v_neighbors
+    ]
+    results = [r for r in results if r is not None]
+    mean_vx = sum(map(lambda r: r[0], results)) / len(results)
+    mean_vy = sum(map(lambda r: r[1], results)) / len(results)
+    return mean_vx, mean_vy
 
 
 def estimate_velocity_field(ds):
