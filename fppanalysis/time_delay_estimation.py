@@ -201,11 +201,15 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     """
     Estimates the average time delay between to signals by finding the time lag that maximizies the
     cross-correlation function.
+    Returns:
+        td Estimated time delay
+        C Cross correlation at a time lag td.
     """
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
-    return ccf_times[np.argmax(ccf)]
+    max_index = np.argmax(ccf)
+    return ccf_times[max_index], ccf[max_index]
 
 
 def get_avg_velocity_from_time_delays(

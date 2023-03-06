@@ -85,10 +85,14 @@ def estimate_velocities_given_points(p0, p1, p2, ds):
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
 
-    delta_tz = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
-    delta_tx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
+    delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
+    delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
+    confidence = min(cx, cy)
 
-    return get_2d_velocities_from_time_delays(delta_tx, delta_tz, r1 - r0, z2 - z0)
+    return (
+        *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+        confidence,
+    )
 
 
 def is_within_boundaries(p, ds):
@@ -100,11 +104,16 @@ def estimate_velocities_for_pixel(x, y, ds):
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
     ignored. Pixels outside the coordinate domain are ignored. Time delay
-    estimation is performed by maximizing the cross- correlation function.
+    estimation is performed by maximizing the cross- correlation function. The
+    confidence of the estimation is a value in the interval (0, 1) given by the
+    maximum of the confidences for each combination, which is given by the
+    minimum of the maximums of the two cross-correlations involved (good luck
+    understanding this last sentence :))
 
     Returns:
         vx Radial velocity
         vy Poloidal velocity
+        c Confidence on the estimation
     """
 
     h_neighbors = [(x - 1, y), (x + 1, y)]
@@ -118,10 +127,11 @@ def estimate_velocities_for_pixel(x, y, ds):
     ]
     results = [r for r in results if r is not None]
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
-        return None, None
+        return None, None, None
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
-    return mean_vx, mean_vy
+    confidence = max(map(lambda r: r[2], results))
+    return mean_vx, mean_vy, confidence
 
 
 def estimate_velocity_field(ds):
@@ -141,12 +151,15 @@ def estimate_velocity_field(ds):
     shape = (len(ds.x.values), len(ds.y.values))
     vx = np.zeros(shape=shape)
     vy = np.zeros(shape=shape)
+    confidences = np.zeros(shape=shape)
     R, Z = get_rz_full(ds)
 
     for i in range(0, shape[0]):
         for j in range(0, shape[1]):
             try:
-                vx[i, j], vy[i, j] = estimate_velocities_for_pixel(i, j, ds)
+                vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
+                    i, j, ds
+                )
             except:
                 print(
                     "Issues estimating velocity for pixel",
@@ -157,4 +170,4 @@ def estimate_velocity_field(ds):
 
     vx[np.isnan(vx) | np.isinf(vx)] = 0
     vy[np.isnan(vy) | np.isinf(vy)] = 0
-    return vx, vy, R, Z
+    return vx, vy, confidences, R, Z

@@ -47,7 +47,7 @@ def update_geometry(x_grid, y_grid, model):
 def test_rad_and_pol():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    v_est, w_est = td.estimate_velocities_for_pixel(1, 1, ds)
+    v_est, w_est, _ = td.estimate_velocities_for_pixel(1, 1, ds)
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
 
@@ -55,7 +55,7 @@ def test_rad_and_pol():
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    v_est, w_est = td.estimate_velocities_for_pixel(1, 1, ds)
+    v_est, w_est, _ = td.estimate_velocities_for_pixel(1, 1, ds)
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
 
@@ -63,7 +63,7 @@ def test_rad_and_neg_pol():
 def test_rad_and_2pol():
     v, w = 1, 2
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    v_est, w_est = td.estimate_velocities_for_pixel(1, 1, ds)
+    v_est, w_est, _ = td.estimate_velocities_for_pixel(1, 1, ds)
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
 
@@ -91,6 +91,6 @@ def test_ignore_dead_pixels():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
-    v_est, w_est = td.estimate_velocities_for_pixel(1, 1, mock_ds)
+    v_est, w_est, _ = td.estimate_velocities_for_pixel(1, 1, mock_ds)
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
