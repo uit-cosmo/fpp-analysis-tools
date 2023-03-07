@@ -1,5 +1,6 @@
 import fppanalysis.time_delay_estimation as tde
 import numpy as np
+import xarray as xr
 
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
@@ -11,6 +12,8 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          delta_x Spatial separation between radially separated points.
          delta_y Spatial separation between poloidally separated points.
 
+    These quantities should be obtained from three pixel points: a reference pixel point,
+    a pixel point separated radially, and a pixel point separated poloidally.
     Returns:
          vx Radial velocity
          vy Poloidal velocity
@@ -24,7 +27,7 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
 
 
-def get_rz(x, y, ds):
+def _get_rz(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
@@ -34,7 +37,7 @@ def get_rz(x, y, ds):
     raise "Unknown format"
 
 
-def get_rz_full(ds):
+def _get_rz_full(ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         shape = (len(ds.x.values), len(ds.y.values))
@@ -51,7 +54,7 @@ def get_rz_full(ds):
     raise "Unknown format"
 
 
-def get_signal(x, y, ds):
+def _get_signal(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
@@ -61,7 +64,7 @@ def get_signal(x, y, ds):
     raise "Unknown format"
 
 
-def get_dt(ds):
+def _get_dt(ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         times = ds["time"]
@@ -73,14 +76,14 @@ def get_dt(ds):
     raise "Unknown format"
 
 
-def estimate_velocities_given_points(p0, p1, p2, ds):
-    dt = get_dt(ds)
-    r0, z0 = get_rz(p0[0], p0[1], ds)
-    r1, z1 = get_rz(p1[0], p1[1], ds)
-    r2, z2 = get_rz(p2[0], p2[1], ds)
-    signal0 = get_signal(p0[0], p0[1], ds)
-    signal1 = get_signal(p1[0], p1[1], ds)
-    signal2 = get_signal(p2[0], p2[1], ds)
+def _estimate_velocities_given_points(p0, p1, p2, ds):
+    dt = _get_dt(ds)
+    r0, z0 = _get_rz(p0[0], p0[1], ds)
+    r1, z1 = _get_rz(p1[0], p1[1], ds)
+    r2, z2 = _get_rz(p2[0], p2[1], ds)
+    signal0 = _get_signal(p0[0], p0[1], ds)
+    signal1 = _get_signal(p1[0], p1[1], ds)
+    signal2 = _get_signal(p2[0], p2[1], ds)
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
@@ -95,19 +98,19 @@ def estimate_velocities_given_points(p0, p1, p2, ds):
     )
 
 
-def is_within_boundaries(p, ds):
+def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds):
+def estimate_velocities_for_pixel(x, y, ds: xr.Dataset):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
     ignored. Pixels outside the coordinate domain are ignored. Time delay
     estimation is performed by maximizing the cross- correlation function. The
     confidence of the estimation is a value in the interval (0, 1) given by the
-    maximum of the confidences for each combination, which is given by the
-    minimum of the maximums of the two cross-correlations involved (good luck
+    mean of the confidences for each combination, which is given by the minimum
+    of the maximums of the two cross-correlations involved (good luck
     understanding this last sentence :))
 
     Returns:
@@ -119,22 +122,22 @@ def estimate_velocities_for_pixel(x, y, ds):
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        estimate_velocities_given_points((x, y), px, py, ds)
+        _estimate_velocities_given_points((x, y), px, py, ds)
         for px in h_neighbors
-        if is_within_boundaries(px, ds)
+        if _is_within_boundaries(px, ds)
         for py in v_neighbors
-        if is_within_boundaries(py, ds)
+        if _is_within_boundaries(py, ds)
     ]
     results = [r for r in results if r is not None]
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
         return None, None, None
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
-    confidence = max(map(lambda r: r[2], results))
+    confidence = sum(map(lambda r: r[2], results)) / len(results)
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(ds):
+def estimate_velocity_field(ds: xr.Dataset):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
@@ -145,6 +148,7 @@ def estimate_velocity_field(ds):
     Returns:
         vx Radial velocities
         vy Poloidal velocities
+        confidences Maximum value of the cross-correlations at each pixel.
         R Radial positions
         Z Radial positions
     """
@@ -152,7 +156,7 @@ def estimate_velocity_field(ds):
     vx = np.zeros(shape=shape)
     vy = np.zeros(shape=shape)
     confidences = np.zeros(shape=shape)
-    R, Z = get_rz_full(ds)
+    R, Z = _get_rz_full(ds)
 
     for i in range(0, shape[0]):
         for j in range(0, shape[1]):
