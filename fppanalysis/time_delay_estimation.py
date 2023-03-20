@@ -222,7 +222,7 @@ def run_norm_window(cut_off_freq, good_time):
     window = int(2*samples)
     return window 
 
-def estimate_time_delay_ccond_av_max(x: np.ndarray, y: np.ndarray, x_t: np.ndarray, y_t: np.ndarray):
+def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray):
     """
     Estimates the average time delay by finding the time lag that maximizies the
     cross conditional average function: 
