@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
+from fppanalysis.conditional_averaging import cond_av
+from fppanalysis.running_moments import run_norm
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
@@ -210,6 +212,56 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
     return ccf_times[max_index], ccf[max_index]
+
+
+def run_norm_window(cut_off_freq, good_time):
+    """ Returns window size for running normalization given a cut off frequency """
+    dt = np.diff(good_time)[0]
+    t_RM = 1/cut_off_freq
+    samples = ((t_RM/dt)-1)/2
+    window = int(2*samples)
+    return window 
+
+def estimate_time_delay_ccond_av_max(x: np.ndarray, y: np.ndarray, x_t: np.ndarray, y_t: np.ndarray):
+    """
+    Estimates the average time delay by finding the time lag that maximizies the
+    cross conditional average function: 
+        Cross conditional average of x given y. 
+    
+    Input: 
+        x: Signal to be averaged
+        y: Reference signal 
+        x_t: Time of signal x
+        y_t: Time of signal y    
+
+    Returns:
+        td Estimated time delay
+        C Normalized cross conditional average at a time lag td.
+
+    """
+
+    # Find length of time window for running normalization
+    freq = 1e3
+    windowx = run_norm_window(freq, x)  
+    windowy = run_norm_window(freq, y)
+
+    # Normalize signal
+    signalx_norm, signalx_time_norm = run_norm(x, windowx, x_t)
+    signaly_norm, signaly_time_norm = run_norm(x, windowy, y_t)
+
+    # Cross conditional average
+    threshold = 2.5
+    Svals, s_av, s_var, t_av, peaks, wait = cond_av(
+        signalx_norm, signalx_time_norm, threshold, Sref=signaly_norm
+    )
+    # Normalize maximum conditional average value
+    norm_s_av = s_av - min(s_av)
+    norm_s_av = norm_s_av / max(norm_s_av)
+
+    # Maximum normalized correlation value
+    max_index = np.argmax(norm_s_av)
+
+    return t_av[max_index], norm_s_av[max_index]
 
 
 def get_avg_velocity_from_time_delays(
