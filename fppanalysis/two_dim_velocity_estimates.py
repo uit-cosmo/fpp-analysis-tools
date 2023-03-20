@@ -75,6 +75,14 @@ def _get_dt(ds):
         return times[1].values - times[0].values
     raise "Unknown format"
 
+def run_norm_window(cut_off_freq, good_time):
+    '''Returns window size for running normalization'''
+    dt = np.diff(good_time)[0]
+    t_RM = 1/cut_off_freq
+    samples = ((t_RM/dt)-1)/2
+    window = int(2*samples)
+    return window 
+
 
 def _estimate_velocities_given_points(p0, p1, p2, ds):
     dt = _get_dt(ds)
@@ -87,6 +95,14 @@ def _estimate_velocities_given_points(p0, p1, p2, ds):
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
+
+    # Cross conditinal average
+    threshold = 2.5
+    Svals1, s_av1, s_var1, t_av1, peaks1, wait1 = conditional_averaging.cond_av(
+        averaging_data_norm, averaging_time_norm, threshold, Sref=reference_data_norm
+    )
+    norm_s_av = s_av1 - min(s_av1)
+    norm_s_av = norm_s_av / max(norm_s_av)
 
     delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
     delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
