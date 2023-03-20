@@ -1,7 +1,8 @@
 import fppanalysis.time_delay_estimation as tde
+from fppanalysis.conditional_averaging import cond_av
+from fppanalysis.running_moments import run_norm
 import numpy as np
 import xarray as xr
-
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     """
@@ -83,7 +84,6 @@ def run_norm_window(cut_off_freq, good_time):
     window = int(2*samples)
     return window 
 
-
 def _estimate_velocities_given_points(p0, p1, p2, ds):
     dt = _get_dt(ds)
     r0, z0 = _get_rz(p0[0], p0[1], ds)
@@ -95,17 +95,38 @@ def _estimate_velocities_given_points(p0, p1, p2, ds):
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
+    
+    # Normalize signal
+    freq = 1e3
+    window0 = run_norm_window(freq, signal0)  # Find length of time window for running normalization
+    window1 = run_norm_window(freq, signal1)
+    window2 = run_norm_window(freq, signal2)
 
-    # Cross conditinal average
+    signal0_norm, signal0_time_norm = run_norm(signal0, window0, signal0.time.values)
+    signal1_norm, signal1_time_norm = run_norm(signal1, window1, signal1.time.values)
+    signal2_norm, signal2_time_norm = run_norm(signal2, window2, signal2.time.values)
+
+    # Cross conditional average
     threshold = 2.5
-    Svals1, s_av1, s_var1, t_av1, peaks1, wait1 = conditional_averaging.cond_av(
-        averaging_data_norm, averaging_time_norm, threshold, Sref=reference_data_norm
+    Svals1, s_av1, s_var1, t_av1, peaks1, wait1 = cond_av(
+        signal1_norm, signal1_time_norm, threshold, Sref=signal0_norm
     )
-    norm_s_av = s_av1 - min(s_av1)
-    norm_s_av = norm_s_av / max(norm_s_av)
+    norm_s_av1 = s_av1 - min(s_av1)
+    norm_s_av1 = norm_s_av1 / max(norm_s_av1)
+    # Maximum correlation value: Confidence value
+    cx = max(norm_s_av1)    
 
-    delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
-    delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
+    Svals2, s_av2, s_var2, t_av2, peaks2, wait2 = cond_av(
+        signal2_norm, signal2_time_norm, threshold, Sref=signal0_norm
+    )
+    norm_s_av2 = s_av2 - min(s_av2)
+    norm_s_av2 = norm_s_av2 / max(norm_s_av2)
+    # Maximum correlation value: Confidence value
+    cy = max(norm_s_av2)    
+
+    # Time lag value at maximum correlation
+    delta_tx = t_av1[np.where(norm_s_av1 == cx)]
+    delta_ty = t_av2[np.where(norm_s_av2 == cy)]   
     confidence = min(cx, cy)
 
     return (
