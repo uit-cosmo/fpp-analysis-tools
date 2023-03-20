@@ -242,8 +242,8 @@ def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarr
 
     # Find length of time window for running normalization
     freq = 1e3
-    windowx = run_norm_window(freq, x)  
-    windowy = run_norm_window(freq, y)
+    windowx = run_norm_window(freq, x_t)  
+    windowy = run_norm_window(freq, y_t)
 
     # Normalize signal
     signalx_norm, signalx_time_norm = run_norm(x, windowx, x_t)
