@@ -75,6 +75,14 @@ def _get_dt(ds):
         return times[1].values - times[0].values
     raise "Unknown format"
 
+def get_time(x, y, ds):
+    # Sajidah's format
+    if hasattr(ds, "time"):
+        return ds.isel(x=x, y=y).time.values
+    # 2d code
+    if hasattr(ds, "t"):
+        return ds.isel(x=x, y=y).time.values
+    raise "Unknown format"
 
 
 def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
@@ -90,8 +98,8 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
         return None
     
     if cross_cond_av:
-        delta_tx, cx = tde.estimate_time_delay_ccond_av_max(signal1.values, signal1.time.values, signal0.values, signal0.time.values)
-        delta_ty, cy = tde.estimate_time_delay_ccond_av_max(signal2.values, signal2.time.values, signal0.values, signal0.time.values)
+        delta_tx, cx = tde.estimate_time_delay_ccond_av_max(signal1, signal1.time.values, signal0, signal0.time.values)
+        delta_ty, cy = tde.estimate_time_delay_ccond_av_max(signal2, signal2.time.values, signal0, signal0.time.values)
     else: 
         delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
         delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
