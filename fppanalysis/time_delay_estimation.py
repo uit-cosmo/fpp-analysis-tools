@@ -247,7 +247,7 @@ def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarr
 
     # Normalize signal
     signalx_norm, signalx_time_norm = run_norm(x, windowx, x_t)
-    signaly_norm, signaly_time_norm = run_norm(x, windowy, y_t)
+    signaly_norm, signaly_time_norm = run_norm(y, windowy, y_t)
 
     # Cross conditional average
     threshold = 2.5
