@@ -214,9 +214,13 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
-def run_norm_window(cut_off_freq, good_time):
-    """ Returns window size for running normalization given a cut off frequency """
-    dt = np.diff(good_time)[0]
+def run_norm_window(cut_off_freq, time):
+    """ Computes window size used in running normalization given a cut off frequency
+        and the data time array
+        Returns
+            window: length of window given in number of data points
+    """
+    dt = np.diff(time)[0]
     t_RM = 1/cut_off_freq
     samples = ((t_RM/dt)-1)/2
     window = int(2*samples)
@@ -225,22 +229,21 @@ def run_norm_window(cut_off_freq, good_time):
 def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray):
     """
     Estimates the average time delay by finding the time lag that maximizies the
-    cross conditional average function: 
-        Cross conditional average of x given y. 
+    cross conditional average of signal x when signal y is larger than threshold. 
     
     Input: 
-        x: Signal to be averaged
+        x: Signal to be conditionally averaged
         y: Reference signal 
         x_t: Time of signal x
         y_t: Time of signal y    
 
     Returns:
-        td Estimated time delay
-        C Normalized cross conditional average at a time lag td.
-
+        td: Estimated time delay
+        C: Cross conditional variance at a time lag td.
+        events: Number of events larger than 2.5 the mean value
     """
 
-    # Find length of time window for running normalization
+    # Find length of time window for running normalization for both signals
     freq = 1e3
     windowx = run_norm_window(freq, x_t)  
     windowy = run_norm_window(freq, y_t)
@@ -254,14 +257,14 @@ def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarr
     Svals, s_av, s_var, t_av, peaks, wait = cond_av(
         signalx_norm, signalx_time_norm, threshold, Sref=signaly_norm
     )
-    # Normalize maximum conditional average value
+    # Normalize conditional average waveform
     norm_s_av = s_av - min(s_av)
     norm_s_av = norm_s_av / max(norm_s_av)
 
-    # Maximum normalized correlation value
+    # Index of maximum normalized correlation value
     max_index = np.argmax(norm_s_av)
 
-    return t_av[max_index], norm_s_av[max_index]
+    return t_av[max_index], s_var[max_index], len(peaks)
 
 
 def get_avg_velocity_from_time_delays(
