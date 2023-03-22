@@ -86,6 +86,12 @@ def _get_time(x, y, ds):
 
 
 def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
+    """Estimates radial and poloidal velocity from estimated time delay 
+    either from cross conditional average (if cross_cond_av = True)
+    between the pixels or cross correlation (if cross_cond_av = False). 
+    In cross conditional average, time array is required in order to normalize
+    the signal before averageing.  
+    """
     dt = _get_dt(ds)
     r0, z0 = _get_rz(p0[0], p0[1], ds)
     r1, z1 = _get_rz(p1[0], p1[1], ds)
@@ -93,20 +99,25 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
     signal0 = _get_signal(p0[0], p0[1], ds)
     signal1 = _get_signal(p1[0], p1[1], ds)
     signal2 = _get_signal(p2[0], p2[1], ds)
-    signal0_time = _get_time(p0[0], p0[1], ds)
-    signal1_time = _get_time(p1[0], p1[1], ds)
-    signal2_time = _get_time(p2[0], p2[1], ds)
+    time0 = _get_time(p0[0], p0[1], ds)
+    time1 = _get_time(p1[0], p1[1], ds)
+    time2 = _get_time(p2[0], p2[1], ds)
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
     
     if cross_cond_av:
-        delta_tx, cx = tde.estimate_time_delay_ccond_av_max(signal1, signal1_time, signal0, signal0_time)
-        delta_ty, cy = tde.estimate_time_delay_ccond_av_max(signal2, signal2_time, signal0, signal0_time)
+        delta_tx, cond_variance_x, events_x = tde.estimate_time_delay_ccond_av_max(signal1, time1, signal0, time0)
+        delta_ty, cond_variance_y, events_y = tde.estimate_time_delay_ccond_av_max(signal2, time2, signal0, time0)
+        
+        # Confidence when velocities are estimated from 
+        # cross conditional averge is: 1 - conditional variance
+        cx = 1 - cond_variance_x
+        cy = 1 - cond_variance_y
     else: 
         delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
         delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
-        
+    
     confidence = min(cx, cy)
 
     return (
@@ -129,6 +140,13 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, cross_cond_av: bool):
     mean of the confidences for each combination, which is given by the minimum
     of the maximums of the two cross-correlations involved (good luck
     understanding this last sentence :))
+
+    Input:
+        x: pixel index x
+        y: pixel index y
+        ds: xarray Dataset
+        cross_cond_av = True: Estimates velocity field of cross conditional average
+        cross_cond_av = False: Estimates velocity field of cross correlation 
 
     Returns:
         vx Radial velocity
@@ -163,8 +181,9 @@ def estimate_velocity_field(ds: xr.Dataset, cross_cond_av: bool):
     GPI grid, from which the velocity field can be easily plotted via f.e matplotlib.quiver.
 
     Input:
-        To estimate velocity field of cross conditional average then cross_cond_av = True
-        To estimate velocity field of cross correlation then cross_cond_av = False
+        ds: xarray Dataset
+        cross_cond_av = True: Estimates velocity field of cross conditional average
+        cross_cond_av = False: Estimates velocity field of cross correlation 
 
     Returns:
         vx Radial velocities
