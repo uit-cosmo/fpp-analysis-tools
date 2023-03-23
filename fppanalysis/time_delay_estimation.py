@@ -214,18 +214,6 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
-def run_norm_window(cut_off_freq, time):
-    """ Computes window size used in running normalization given a cut off frequency
-        and the data time array
-        Returns
-            window: length of window given in number of data points
-    """
-    dt = np.diff(time)[0]
-    t_RM = 1/cut_off_freq
-    samples = ((t_RM/dt)-1)/2
-    window = int(2*samples)
-    return window 
-
 def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray):
     """
     Estimates the average time delay by finding the time lag that maximizies the
