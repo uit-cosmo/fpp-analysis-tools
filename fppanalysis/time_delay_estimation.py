@@ -214,7 +214,7 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
-def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, cut_off_freq, threshold=2.5):
+def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, cut_off_freq=1e3, threshold=2.5):
     """
     Estimates the average time delay by finding the time lag that maximizies the
     cross conditional average of signal x when signal y is larger than threshold. 
