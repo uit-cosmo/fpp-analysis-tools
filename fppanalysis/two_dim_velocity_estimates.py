@@ -85,6 +85,7 @@ def _get_time(x, y, ds):
         return ds.t.values
     raise "Unknown format"
 
+
 def _estimate_time_delay(
     x: np.ndarray,
     x_t: np.ndarray,
@@ -100,7 +101,12 @@ def _estimate_time_delay(
 
     if method == "cond_av":
         delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
-            x=x, x_t=x_t, y=y, y_t=y_t, cut_off_freq=kwargs['cut_off_freq'], threshold=kwargs['threshold']
+            x=x,
+            x_t=x_t,
+            y=y,
+            y_t=y_t,
+            cut_off_freq=kwargs["cut_off_freq"],
+            threshold=kwargs["threshold"],
         )
 
         # Confidence when velocities are estimated from
@@ -113,10 +119,7 @@ def _estimate_time_delay(
     return delta_t, c
 
 
-
-def _estimate_velocities_given_points(
-    p0, p1, p2, ds, method: str, **kwargs: dict
-):
+def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dict):
     """Estimates radial and poloidal velocity from estimated time delay
     either from cross conditional average (if cross_cond_av = True)
     between the pixels or cross correlation (if cross_cond_av = False).
@@ -144,8 +147,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=kwargs['cut_off_freq'],
-        threshold=kwargs['threshold']
+        cut_off_freq=kwargs["cut_off_freq"],
+        threshold=kwargs["threshold"],
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -154,8 +157,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=kwargs['cut_off_freq'],
-        threshold=kwargs['threshold']
+        cut_off_freq=kwargs["cut_off_freq"],
+        threshold=kwargs["threshold"],
     )
 
     confidence = min(cx, cy)
@@ -170,9 +173,7 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, method: str, **kwargs: dict
-):
+def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: dict):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
@@ -200,7 +201,9 @@ def estimate_velocities_for_pixel(
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, method, kwargs['cut_off_freq'], kwargs['threshold'])
+        _estimate_velocities_given_points(
+            (x, y), px, py, ds, method, kwargs["cut_off_freq"], kwargs["threshold"]
+        )
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
@@ -215,9 +218,7 @@ def estimate_velocities_for_pixel(
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(
-    ds: xr.Dataset, method: str, **kwargs: dict
-):
+def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
@@ -252,8 +253,8 @@ def estimate_velocity_field(
                     j,
                     ds,
                     method,
-                    kwargs['cut_off_freq'],
-                    kwargs['threshold'],
+                    kwargs["cut_off_freq"],
+                    kwargs["threshold"],
                 )
             except:
                 print(
