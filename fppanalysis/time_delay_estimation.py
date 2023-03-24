@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
 from fppanalysis.conditional_averaging import cond_av
-from fppanalysis.running_moments import run_norm
+from fppanalysis.running_moments import run_norm, run_norm_window
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
