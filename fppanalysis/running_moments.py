@@ -138,21 +138,15 @@ def run_norm(S, radius, T=None, return_run_moment=False):
     return res
 
 
-def run_norm_window(cut_off_freq, time):
-    """Computes number of data points of window size used in running
-    normalization given a cut off frequency and the data time array. This
-    window size will be multiplied with 2 in running normalization and running
-    moments functions.
-
-    Returns
-        window: length of window given in number of data points
+def window_radius(cut_off_freq, time):
+    """Returns window radius used in running moments and normalization
+    given a cut off frequency. Time step, dt, is computed from time. 
     """
     import numpy as np
 
     dt = np.diff(time)[0]
     t_run_mean = 1 / cut_off_freq
     samples = ((t_run_mean / dt) - 1) / 2
-    # Window size is mulitplied with 2 in run_norm function, and therefore
-    # not multiplied with 2 here
-    window = int(samples)
-    return window
+
+    return int(samples)
+    
