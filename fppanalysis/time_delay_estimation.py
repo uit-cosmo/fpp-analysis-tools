@@ -200,9 +200,9 @@ def estimate_delays(
 
 
 def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
-    """
-    Estimates the average time delay between to signals by finding the time lag that maximizies the
-    cross-correlation function.
+    """Estimates the average time delay between to signals by finding the time
+    lag that maximizies the cross-correlation function.
+
     Returns:
         td Estimated time delay
         C Cross correlation at a time lag td.
@@ -214,16 +214,23 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
-def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, cut_off_freq=1e3, threshold=2.5):
-    """
-    Estimates the average time delay by finding the time lag that maximizies the
-    cross conditional average of signal x when signal y is larger than threshold. 
-    
-    Input: 
+def estimate_time_delay_ccond_av_max(
+    x: np.ndarray,
+    x_t: np.ndarray,
+    y: np.ndarray,
+    y_t: np.ndarray,
+    cut_off_freq=1e3,
+    threshold=2.5,
+):
+    """Estimates the average time delay by finding the time lag that maximizies
+    the cross conditional average of signal x when signal y is larger than
+    threshold.
+
+    Input:
         x: Signal to be conditionally averaged
-        y: Reference signal 
+        y: Reference signal
         x_t: Time of signal x
-        y_t: Time of signal y    
+        y_t: Time of signal y
 
     Returns:
         td: Estimated time delay
@@ -232,7 +239,7 @@ def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarr
     """
 
     # Find length of time window for running normalization for both signals
-    windowx = run_norm_window(cut_off_freq, x_t)  
+    windowx = run_norm_window(cut_off_freq, x_t)
     windowy = run_norm_window(cut_off_freq, y_t)
 
     # Normalize signal
