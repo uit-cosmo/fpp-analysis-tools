@@ -219,8 +219,7 @@ def estimate_time_delay_ccond_av_max(
     x_t: np.ndarray,
     y: np.ndarray,
     y_t: np.ndarray,
-    cut_off_freq=1e3,
-    threshold=2.5,
+    **kwargs
 ):
     """Estimates the average time delay by finding the time lag that maximizies
     the cross conditional average of signal x when signal y is larger than
@@ -237,6 +236,8 @@ def estimate_time_delay_ccond_av_max(
         C: Cross conditional variance at a time lag td.
         events: Number of events larger than 2.5 the mean value
     """
+    cut_off_freq = kwargs['cut_off_freq']
+    threshold = kwargs['threshold']
 
     # Find length of time window for running normalization for both signals
     windowx = run_norm_window(cut_off_freq, x_t)
@@ -247,7 +248,6 @@ def estimate_time_delay_ccond_av_max(
     signaly_norm, _ = run_norm(y, windowy, y_t)
 
     # Cross conditional average
-    threshold = 2.5
     _, s_av, s_var, t_av, peaks, _ = cond_av(
         signalx_norm, signalx_time_norm, threshold, Sref=signaly_norm
     )
