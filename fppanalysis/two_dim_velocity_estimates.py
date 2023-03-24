@@ -100,7 +100,7 @@ def _estimate_time_delay(
 
     if method == "cond_av":
         delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
-            x=x, x_t=x_t, y=y, y_t=y_t, kwargs['cut_off_freq'], kwargs['threshold']
+            x=x, x_t=x_t, y=y, y_t=y_t, cut_off_freq=kwargs['cut_off_freq'], threshold=kwargs['threshold']
         )
 
         # Confidence when velocities are estimated from
@@ -144,8 +144,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        kwargs['cut_off_freq'],
-        kwargs['threshold']
+        cut_off_freq=kwargs['cut_off_freq'],
+        threshold=kwargs['threshold']
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -154,8 +154,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        kwargs['cut_off_freq'],
-        kwargs['threshold']
+        cut_off_freq=kwargs['cut_off_freq'],
+        threshold=kwargs['threshold']
     )
 
     confidence = min(cx, cy)

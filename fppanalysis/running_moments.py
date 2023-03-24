@@ -140,7 +140,7 @@ def run_norm(S, radius, T=None, return_run_moment=False):
 
 def window_radius(cut_off_freq, time):
     """Returns window radius used in running moments and normalization
-    given a cut off frequency. Time step, dt, is computed from time. 
+    given a cut off frequency. Time step, dt, is computed from time.
     """
     import numpy as np
 
@@ -149,4 +149,3 @@ def window_radius(cut_off_freq, time):
     samples = ((t_run_mean / dt) - 1) / 2
 
     return int(samples)
-    
