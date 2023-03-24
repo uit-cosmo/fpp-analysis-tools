@@ -3,6 +3,7 @@ import fppanalysis.time_delay_estimation as tde
 import numpy as np
 import xarray as xr
 
+
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     """
     Estimates radial and poloidal velocities given the input parameters:
@@ -75,29 +76,39 @@ def _get_dt(ds):
         return times[1].values - times[0].values
     raise "Unknown format"
 
+
 def _get_time(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         return ds.isel(x=x, y=y).time.values
 
 
-def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, method: str, dt: float, cut_off_freq=1e3, threshold=2.5):
-    """
-    Estimates the average time delay between to signals by finding the time lag that maximizies 
-    either the cross-correlation function or the cross conditional average of signal x when 
-    signal y is larger than threshold. Either one of these method must be specified in method-argument. 
-    
-    Input: 
+def _estimate_time_delay(
+    x: np.ndarray,
+    x_t: np.ndarray,
+    y: np.ndarray,
+    y_t: np.ndarray,
+    method: str,
+    dt: float,
+    cut_off_freq=1e3,
+    threshold=2.5,
+):
+    """Estimates the average time delay between to signals by finding the time
+    lag that maximizies either the cross-correlation function or the cross
+    conditional average of signal x when signal y is larger than threshold.
+    Either one of these method must be specified in method-argument.
+
+    Input:
         x: Signal to be conditionally averaged
-        y: Reference signal 
+        y: Reference signal
         x_t: Time of signal x
-        y_t: Time of signal y    
+        y_t: Time of signal y
         method: 'cross_corr' or 'cond_av' for either cross correlation or cross conditional average
         if method == 'cross_corr':
             dt: Time step
         if method == 'cond_av':
             cut_off_freq: Cut off frequency to decide window size for running moments
-            threshold: Threshold value for conditional average. Defualt value is set to 2.5. 
+            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
 
     Returns:
         if method == 'cross_corr':
@@ -110,31 +121,33 @@ def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.
             events: Number of events larger than 2.5 the mean value
     """
 
-    if method == 'cross_corr':
+    if method == "cross_corr":
         delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
         return delta_t, c
 
-    if method == 'cond_av':
-        delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(x=x, x_t=x_t, y=y, y_t=y_t)
-        
-        # Confidence when velocities are estimated from 
+    if method == "cond_av":
+        delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
+            x=x, x_t=x_t, y=y, y_t=y_t
+        )
+
+        # Confidence when velocities are estimated from
         # cross conditional averge is: 1 - conditional variance
         c = 1 - cond_variance
 
         return delta_t, c
 
     else:
-        raise Exception('Method must be either cross_corr or cond_av')
+        raise Exception("Method must be either cross_corr or cond_av")
 
 
-
-
-def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, cut_off_freq=1e3, threshold=2.5):
-    """Estimates radial and poloidal velocity from estimated time delay 
+def _estimate_velocities_given_points(
+    p0, p1, p2, ds, method: str, cut_off_freq=1e3, threshold=2.5
+):
+    """Estimates radial and poloidal velocity from estimated time delay
     either from cross conditional average (if cross_cond_av = True)
-    between the pixels or cross correlation (if cross_cond_av = False). 
+    between the pixels or cross correlation (if cross_cond_av = False).
     In cross conditional average, time array is required in order to normalize
-    the signal before averageing.  
+    the signal before averageing.
     """
     dt = _get_dt(ds)
     r0, z0 = _get_rz(p0[0], p0[1], ds)
@@ -149,9 +162,27 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, cut_off_freq=
 
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
-    
-    delta_ty, cy = _estimate_time_delay(x=signal2, x_t=time2, y=signal0, y_t=time0, method=method, dt=dt, cut_off_freq=1e3, threshold=2.5)
-    delta_tx, cx = _estimate_time_delay(x=signal1, x_t=time1, y=signal0, y_t=time0, method=method, dt=dt, cut_off_freq=1e3, threshold=2.5)
+
+    delta_ty, cy = _estimate_time_delay(
+        x=signal2,
+        x_t=time2,
+        y=signal0,
+        y_t=time0,
+        method=method,
+        dt=dt,
+        cut_off_freq=1e3,
+        threshold=2.5,
+    )
+    delta_tx, cx = _estimate_time_delay(
+        x=signal1,
+        x_t=time1,
+        y=signal0,
+        y_t=time0,
+        method=method,
+        dt=dt,
+        cut_off_freq=1e3,
+        threshold=2.5,
+    )
 
     confidence = min(cx, cy)
 
@@ -165,7 +196,9 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5):
+def estimate_velocities_for_pixel(
+    x, y, ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5
+):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
@@ -180,8 +213,10 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, cut_off_fre
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
-        cross_cond_av = True: Estimates velocity field of cross conditional average
-        cross_cond_av = False: Estimates velocity field of cross correlation 
+        method: 'cross_corr' or 'cond_av'
+        if method == 'cond_av':
+            cut_off_freq: Cut off frequency to decide window size for running moments
+            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
 
     Returns:
         vx Radial velocity
@@ -207,7 +242,9 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, cut_off_fre
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5):
+def estimate_velocity_field(
+    ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5
+):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
@@ -217,8 +254,10 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, cut_off_freq=1e3, thres
 
     Input:
         ds: xarray Dataset
-        cross_cond_av = True: Estimates velocity field of cross conditional average
-        cross_cond_av = False: Estimates velocity field of cross correlation 
+        method: 'cross_corr' or 'cond_av'
+        if method == 'cond_av':
+            cut_off_freq: Cut off frequency to decide window size for running moments
+            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
 
     Returns:
         vx Radial velocities
@@ -237,7 +276,12 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, cut_off_freq=1e3, thres
         for j in range(0, shape[1]):
             try:
                 vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
-                    i, j, ds, method, cut_off_freq=1e3, threshold=2.5,
+                    i,
+                    j,
+                    ds,
+                    method,
+                    cut_off_freq=1e3,
+                    threshold=2.5,
                 )
             except:
                 print(
