@@ -85,7 +85,55 @@ def _get_time(x, y, ds):
     raise "Unknown format"
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
+def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, method: str, dt: float):
+    """
+    Estimates the average time delay between to signals by finding the time lag that maximizies 
+    either the cross-correlation function or the cross conditional average of signal x when 
+    signal y is larger than threshold. Either one of these method must be specified in method-argument. 
+    
+    Input: 
+        x: Signal to be conditionally averaged
+        y: Reference signal 
+        x_t: Time of signal x
+        y_t: Time of signal y    
+        method: 'cross_corr' or 'cond_av' for either cross correlation or cross conditional average
+        if method == 'cross_corr':
+            dt: Time step
+        if method == 'cond_av':
+            cut_off_freq: Cut off frequency to decide window size for running moments
+            threshold: Threshold value for conditional average. Defualt value is set to 2.5. 
+
+    Returns:
+        if method == 'cross_corr':
+            td Estimated time delay
+            C Cross correlation at a time lag td.
+
+        if method == 'cond_av':
+            td: Estimated time delay
+            C: Cross conditional variance at a time lag td.
+            events: Number of events larger than 2.5 the mean value
+    """
+
+    if method == 'cross_corr':
+        delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
+        return delta_t, c
+
+    if method == 'cond_av':
+        delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(x=x, x_t=x_t, y=y, y_t=y_t)
+        
+        # Confidence when velocities are estimated from 
+        # cross conditional averge is: 1 - conditional variance
+        c = 1 - cond_variance
+
+        return delta_t, c
+
+    else:
+        raise Exception('Method must be either cross_corr or cond_av')
+
+
+
+
+def _estimate_velocities_given_points(p0, p1, p2, ds, method: str):
     """Estimates radial and poloidal velocity from estimated time delay 
     either from cross conditional average (if cross_cond_av = True)
     between the pixels or cross correlation (if cross_cond_av = False). 
@@ -106,18 +154,9 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, cross_cond_av: bool):
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
     
-    if cross_cond_av:
-        delta_tx, cond_variance_x, events_x = tde.estimate_time_delay_ccond_av_max(signal1, time1, signal0, time0)
-        delta_ty, cond_variance_y, events_y = tde.estimate_time_delay_ccond_av_max(signal2, time2, signal0, time0)
-        
-        # Confidence when velocities are estimated from 
-        # cross conditional averge is: 1 - conditional variance
-        cx = 1 - cond_variance_x
-        cy = 1 - cond_variance_y
-    else: 
-        delta_ty, cy = tde.estimate_time_delay_ccmax(x=signal2, y=signal0, dt=dt)
-        delta_tx, cx = tde.estimate_time_delay_ccmax(x=signal1, y=signal0, dt=dt)
-    
+    delta_ty, cy = _estimate_time_delay(x=signal2, x_t=time2, y=signal0, y_t=time0, method=method, dt=dt)
+    delta_tx, cx = _estimate_time_delay(x=signal1, x_t=time1, y=signal0, y_t=time0, method=method, dt=dt)
+
     confidence = min(cx, cy)
 
     return (
@@ -130,7 +169,7 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, cross_cond_av: bool):
+def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
@@ -157,7 +196,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, cross_cond_av: bool):
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, cross_cond_av)
+        _estimate_velocities_given_points((x, y), px, py, ds, method)
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
@@ -172,7 +211,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, cross_cond_av: bool):
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(ds: xr.Dataset, cross_cond_av: bool):
+def estimate_velocity_field(ds: xr.Dataset, method: str):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
@@ -202,7 +241,7 @@ def estimate_velocity_field(ds: xr.Dataset, cross_cond_av: bool):
         for j in range(0, shape[1]):
             try:
                 vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
-                    i, j, ds, cross_cond_av,
+                    i, j, ds, method,
                 )
             except:
                 print(
