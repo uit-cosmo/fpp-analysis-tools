@@ -89,9 +89,8 @@ def run_moment(S, radius, moment=1, T=None):
 
 
 def run_norm(S, radius, T=None, return_run_moment=False):
-    """
-    Performs the standard running normalization on S by subtracting
-    a running mean and dividing by a running standard deviation.
+    """Performs the standard running normalization on S by subtracting a
+    running mean and dividing by a running standard deviation.
 
     All outputs are returned with a size M=N-4*radius, corresponding to the
     running standard deviation.
@@ -140,12 +139,13 @@ def run_norm(S, radius, T=None, return_run_moment=False):
 
 
 def run_norm_window(cut_off_freq, time):
-    """Computes number of data points of window size used in running normalization
-    given a cut off frequency and the data time array. This window size will be multiplied
-    with 2 in running normalization and running moments functions.
+    """Computes number of data points of window size used in running
+    normalization given a cut off frequency and the data time array. This
+    window size will be multiplied with 2 in running normalization and running
+    moments functions.
 
-        Returns
-            window: length of window given in number of data points
+    Returns
+        window: length of window given in number of data points
     """
     import numpy as np
 
