@@ -71,7 +71,7 @@ def run_moment(S, radius, moment=1, T=None):
         rm = run_mean(S, radius)
         tmp = S[radius:-radius] - rm
 
-        r_skew = run_mean(tmp ** 3, radius) / run_mean(tmp ** 2, radius) ** 1.5
+        r_skew = run_mean(tmp**3, radius) / run_mean(tmp**2, radius) ** 1.5
         if T is None:
             return r_skew, S[2 * radius : -2 * radius]
         else:
@@ -81,7 +81,7 @@ def run_moment(S, radius, moment=1, T=None):
         rm = run_mean(S, radius)
         tmp = S[radius:-radius] - rm
 
-        r_flat = run_mean(tmp ** 4, radius) / run_mean(tmp ** 2, radius) ** 2
+        r_flat = run_mean(tmp**4, radius) / run_mean(tmp**2, radius) ** 2
         if T is None:
             return r_flat, S[2 * radius : -2 * radius]
         else:
@@ -137,3 +137,22 @@ def run_norm(S, radius, T=None, return_run_moment=False):
         res = res[0]
 
     return res
+
+
+def run_norm_window(cut_off_freq, time):
+    """Computes number of data points of window size used in running normalization
+    given a cut off frequency and the data time array. This window size will be multiplied
+    with 2 in running normalization and running moments functions.
+
+        Returns
+            window: length of window given in number of data points
+    """
+    import numpy as np
+
+    dt = np.diff(time)[0]
+    t_run_mean = 1 / cut_off_freq
+    samples = ((t_run_mean / dt) - 1) / 2
+    # Window size is mulitplied with 2 in run_norm function, and therefore
+    # not multiplied with 2 here
+    window = int(samples)
+    return window
