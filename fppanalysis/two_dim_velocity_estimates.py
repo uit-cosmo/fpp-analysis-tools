@@ -1,5 +1,4 @@
 import fppanalysis.time_delay_estimation as tde
-
 import numpy as np
 import xarray as xr
 
@@ -81,7 +80,10 @@ def _get_time(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         return ds.isel(x=x, y=y).time.values
-
+    # 2d code
+    if hasattr(ds, "t"):
+        return ds.t.values
+    raise "Unknown format"
 
 def _estimate_time_delay(
     x: np.ndarray,
@@ -90,58 +92,30 @@ def _estimate_time_delay(
     y_t: np.ndarray,
     method: str,
     dt: float,
-    cut_off_freq=1e3,
-    threshold=2.5,
+    **kwargs: dict
 ):
-    """Estimates the average time delay between to signals by finding the time
-    lag that maximizies either the cross-correlation function or the cross
-    conditional average of signal x when signal y is larger than threshold.
-    Either one of these method must be specified in method-argument.
-
-    Input:
-        x: Signal to be conditionally averaged
-        y: Reference signal
-        x_t: Time of signal x
-        y_t: Time of signal y
-        method: 'cross_corr' or 'cond_av' for either cross correlation or cross conditional average
-        if method == 'cross_corr':
-            dt: Time step
-        if method == 'cond_av':
-            cut_off_freq: Cut off frequency to decide window size for running moments
-            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
-
-    Returns:
-        if method == 'cross_corr':
-            td Estimated time delay
-            C Cross correlation at a time lag td.
-
-        if method == 'cond_av':
-            td: Estimated time delay
-            C: Cross conditional variance at a time lag td.
-            events: Number of events larger than 2.5 the mean value
-    """
 
     if method == "cross_corr":
         delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
-        return delta_t, c
 
     if method == "cond_av":
         delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
-            x=x, x_t=x_t, y=y, y_t=y_t
+            x=x, x_t=x_t, y=y, y_t=y_t, kwargs['cut_off_freq'], kwargs['threshold']
         )
 
         # Confidence when velocities are estimated from
         # cross conditional averge is: 1 - conditional variance
         c = 1 - cond_variance
 
-        return delta_t, c
-
     else:
         raise Exception("Method must be either cross_corr or cond_av")
 
+    return delta_t, c
+
+
 
 def _estimate_velocities_given_points(
-    p0, p1, p2, ds, method: str, cut_off_freq=1e3, threshold=2.5
+    p0, p1, p2, ds, method: str, **kwargs: dict
 ):
     """Estimates radial and poloidal velocity from estimated time delay
     either from cross conditional average (if cross_cond_av = True)
@@ -170,8 +144,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=1e3,
-        threshold=2.5,
+        kwargs['cut_off_freq'],
+        kwargs['threshold']
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -180,8 +154,8 @@ def _estimate_velocities_given_points(
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=1e3,
-        threshold=2.5,
+        kwargs['cut_off_freq'],
+        kwargs['threshold']
     )
 
     confidence = min(cx, cy)
@@ -197,7 +171,7 @@ def _is_within_boundaries(p, ds):
 
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5
+    x, y, ds: xr.Dataset, method: str, **kwargs: dict
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -214,9 +188,8 @@ def estimate_velocities_for_pixel(
         y: pixel index y
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        if method == 'cond_av':
-            cut_off_freq: Cut off frequency to decide window size for running moments
-            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
+        kwargs: dictionary consisting of cut off frequency to decide window radius for running moments
+        and threshold value for conditional average. Default value is set to 2.5.
 
     Returns:
         vx Radial velocity
@@ -227,7 +200,7 @@ def estimate_velocities_for_pixel(
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, method)
+        _estimate_velocities_given_points((x, y), px, py, ds, method, kwargs['cut_off_freq'], kwargs['threshold'])
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
@@ -243,7 +216,7 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5
+    ds: xr.Dataset, method: str, **kwargs: dict
 ):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
@@ -255,9 +228,8 @@ def estimate_velocity_field(
     Input:
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        if method == 'cond_av':
-            cut_off_freq: Cut off frequency to decide window size for running moments
-            threshold: Threshold value for conditional average. Defualt value is set to 2.5.
+        kwargs: dictionary consisting of cut off frequency to decide window radius for running moments
+        and threshold value for conditional average. Default value is set to 2.5.
 
     Returns:
         vx Radial velocities
@@ -280,8 +252,8 @@ def estimate_velocity_field(
                     j,
                     ds,
                     method,
-                    cut_off_freq=1e3,
-                    threshold=2.5,
+                    kwargs['cut_off_freq'],
+                    kwargs['threshold'],
                 )
             except:
                 print(
