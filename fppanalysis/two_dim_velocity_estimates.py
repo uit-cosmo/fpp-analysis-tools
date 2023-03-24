@@ -79,13 +79,9 @@ def _get_time(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
         return ds.isel(x=x, y=y).time.values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).time.values
-    raise "Unknown format"
 
 
-def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, method: str, dt: float):
+def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, method: str, dt: float, cut_off_freq=1e3, threshold=2.5):
     """
     Estimates the average time delay between to signals by finding the time lag that maximizies 
     either the cross-correlation function or the cross conditional average of signal x when 
@@ -133,7 +129,7 @@ def _estimate_time_delay(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.
 
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, method: str):
+def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, cut_off_freq=1e3, threshold=2.5):
     """Estimates radial and poloidal velocity from estimated time delay 
     either from cross conditional average (if cross_cond_av = True)
     between the pixels or cross correlation (if cross_cond_av = False). 
@@ -154,8 +150,8 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str):
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
     
-    delta_ty, cy = _estimate_time_delay(x=signal2, x_t=time2, y=signal0, y_t=time0, method=method, dt=dt)
-    delta_tx, cx = _estimate_time_delay(x=signal1, x_t=time1, y=signal0, y_t=time0, method=method, dt=dt)
+    delta_ty, cy = _estimate_time_delay(x=signal2, x_t=time2, y=signal0, y_t=time0, method=method, dt=dt, cut_off_freq=1e3, threshold=2.5)
+    delta_tx, cx = _estimate_time_delay(x=signal1, x_t=time1, y=signal0, y_t=time0, method=method, dt=dt, cut_off_freq=1e3, threshold=2.5)
 
     confidence = min(cx, cy)
 
@@ -169,7 +165,7 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str):
+def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
@@ -211,7 +207,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str):
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(ds: xr.Dataset, method: str):
+def estimate_velocity_field(ds: xr.Dataset, method: str, cut_off_freq=1e3, threshold=2.5):
     """
     Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
     computed the velocity field. The estimation takes into account poloidal flows as described in
@@ -241,7 +237,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str):
         for j in range(0, shape[1]):
             try:
                 vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
-                    i, j, ds, method,
+                    i, j, ds, method, cut_off_freq=1e3, threshold=2.5,
                 )
             except:
                 print(
