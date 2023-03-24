@@ -214,7 +214,7 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
-def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray):
+def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarray, y_t: np.ndarray, cut_off_freq, threshold=2.5):
     """
     Estimates the average time delay by finding the time lag that maximizies the
     cross conditional average of signal x when signal y is larger than threshold. 
@@ -232,25 +232,21 @@ def estimate_time_delay_ccond_av_max(x: np.ndarray, x_t: np.ndarray, y: np.ndarr
     """
 
     # Find length of time window for running normalization for both signals
-    freq = 1e3
-    windowx = run_norm_window(freq, x_t)  
-    windowy = run_norm_window(freq, y_t)
+    windowx = run_norm_window(cut_off_freq, x_t)  
+    windowy = run_norm_window(cut_off_freq, y_t)
 
     # Normalize signal
     signalx_norm, signalx_time_norm = run_norm(x, windowx, x_t)
-    signaly_norm, signaly_time_norm = run_norm(y, windowy, y_t)
+    signaly_norm, _ = run_norm(y, windowy, y_t)
 
     # Cross conditional average
     threshold = 2.5
-    Svals, s_av, s_var, t_av, peaks, wait = cond_av(
+    _, s_av, s_var, t_av, peaks, _ = cond_av(
         signalx_norm, signalx_time_norm, threshold, Sref=signaly_norm
     )
-    # Normalize conditional average waveform
-    norm_s_av = s_av - min(s_av)
-    norm_s_av = norm_s_av / max(norm_s_av)
 
-    # Index of maximum normalized correlation value
-    max_index = np.argmax(norm_s_av)
+    # Index of maximum correlation value
+    max_index = np.argmax(s_av)
 
     return t_av[max_index], s_var[max_index], len(peaks)
 
