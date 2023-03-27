@@ -239,8 +239,8 @@ def estimate_time_delay_ccond_av_max(
     """
 
     # Find length of time window for running normalization for both signals
-    windowx = run_norm_window(cut_off_freq, x_t)
-    windowy = run_norm_window(cut_off_freq, y_t)
+    windowx = window_radius(cut_off_freq, x_t)
+    windowy = window_radius(cut_off_freq, y_t)
 
     # Normalize signal
     signalx_norm, signalx_time_norm = run_norm(x, windowx, x_t)
