@@ -219,7 +219,7 @@ def estimate_time_delay_ccond_av_max(
     x_t: np.ndarray,
     y: np.ndarray,
     y_t: np.ndarray,
-    kwargs
+    **kwargs
 ):
     """Estimates the average time delay by finding the time lag that maximizies
     the cross conditional average of signal x when signal y is larger than
