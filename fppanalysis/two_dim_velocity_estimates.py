@@ -147,8 +147,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=kwargs["cut_off_freq"],
-        threshold=kwargs["threshold"],
+        **kwargs,
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -157,8 +156,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        cut_off_freq=kwargs["cut_off_freq"],
-        threshold=kwargs["threshold"],
+        **kwargs,
     )
 
     confidence = min(cx, cy)
@@ -202,7 +200,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
         _estimate_velocities_given_points(
-            (x, y), px, py, ds, method, kwargs["cut_off_freq"], kwargs["threshold"]
+            (x, y), px, py, ds, method, **kwargs
         )
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
@@ -252,9 +250,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
                     i,
                     j,
                     ds,
-                    method,
-                    kwargs["cut_off_freq"],
-                    kwargs["threshold"],
+                    method, **kwargs
                 )
             except:
                 print(
