@@ -93,20 +93,19 @@ def _estimate_time_delay(
     y_t: np.ndarray,
     method: str,
     dt: float,
-    **kwargs: dict
+    kwargs: dict
 ):
 
     if method == "cross_corr":
         delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
 
-    if method == "cond_av":
+    elif method == "cond_av":
         delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
             x=x,
             x_t=x_t,
             y=y,
             y_t=y_t,
-            cut_off_freq=kwargs["cut_off_freq"],
-            threshold=kwargs["threshold"],
+            kwargs=kwargs,
         )
 
         # Confidence when velocities are estimated from
@@ -147,7 +146,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        **kwargs,
+        kwargs=kwargs,
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -156,7 +155,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        **kwargs,
+        kwargs=kwargs,
     )
 
     confidence = min(cx, cy)
