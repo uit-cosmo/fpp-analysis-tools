@@ -93,7 +93,7 @@ def _estimate_time_delay(
     y_t: np.ndarray,
     method: str,
     dt: float,
-    kwargs: dict
+    **kwargs: dict
 ):
 
     if method == "cross_corr":
@@ -105,7 +105,7 @@ def _estimate_time_delay(
             x_t=x_t,
             y=y,
             y_t=y_t,
-            kwargs=kwargs,
+            **kwargs,
         )
 
         # Confidence when velocities are estimated from
@@ -146,7 +146,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        kwargs=kwargs,
+        **kwargs,
     )
     delta_tx, cx = _estimate_time_delay(
         x=signal1,
@@ -155,7 +155,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         y_t=time0,
         method=method,
         dt=dt,
-        kwargs=kwargs,
+        **kwargs,
     )
 
     confidence = min(cx, cy)
