@@ -108,10 +108,6 @@ def _estimate_time_delay(
             **kwargs,
         )
 
-        # Confidence when velocities are estimated from
-        # cross conditional averge is: 1 - conditional variance
-        c = 1 - cond_variance
-
     else:
         raise Exception("Method must be either cross_corr or cond_av")
 
