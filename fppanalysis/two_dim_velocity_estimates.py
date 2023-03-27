@@ -198,9 +198,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points(
-            (x, y), px, py, ds, method, **kwargs
-        )
+        _estimate_velocities_given_points((x, y), px, py, ds, method, **kwargs)
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
@@ -246,10 +244,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
         for j in range(0, shape[1]):
             try:
                 vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
-                    i,
-                    j,
-                    ds,
-                    method, **kwargs
+                    i, j, ds, method, **kwargs
                 )
             except:
                 print(
