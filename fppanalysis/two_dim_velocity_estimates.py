@@ -100,7 +100,8 @@ def _estimate_time_delay(
         delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
 
     elif method == "cond_av":
-        delta_t, cond_variance, events = tde.estimate_time_delay_ccond_av_max(
+        # c: conditional variance
+        delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
             x=x,
             x_t=x_t,
             y=y,
