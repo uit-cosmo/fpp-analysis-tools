@@ -90,7 +90,6 @@ def _estimate_time_delay(
     x: np.ndarray,
     x_t: np.ndarray,
     y: np.ndarray,
-    y_t: np.ndarray,
     method: str,
     dt: float,
     **kwargs: dict
@@ -105,9 +104,9 @@ def _estimate_time_delay(
             x=x,
             x_t=x_t,
             y=y,
-            y_t=y_t,
             **kwargs,
         )
+        print(events)
 
     else:
         raise Exception("Method must be either cross_corr or cond_av")
@@ -116,11 +115,10 @@ def _estimate_time_delay(
 
 
 def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dict):
-    """Estimates radial and poloidal velocity from estimated time delay
-    either from cross conditional average (if cross_cond_av = True)
-    between the pixels or cross correlation (if cross_cond_av = False).
-    In cross conditional average, time array is required in order to normalize
-    the signal before averageing.
+    """Estimates radial and poloidal velocity from estimated time delay either
+    from cross conditional average between the pixels or cross correlation.
+
+    This is specified in method argument.
     """
     dt = _get_dt(ds)
     r0, z0 = _get_rz(p0[0], p0[1], ds)
@@ -129,7 +127,6 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
     signal0 = _get_signal(p0[0], p0[1], ds)
     signal1 = _get_signal(p1[0], p1[1], ds)
     signal2 = _get_signal(p2[0], p2[1], ds)
-    time0 = _get_time(p0[0], p0[1], ds)
     time1 = _get_time(p1[0], p1[1], ds)
     time2 = _get_time(p2[0], p2[1], ds)
 
@@ -140,7 +137,6 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         x=signal2,
         x_t=time2,
         y=signal0,
-        y_t=time0,
         method=method,
         dt=dt,
         **kwargs,
@@ -149,7 +145,6 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         x=signal1,
         x_t=time1,
         y=signal0,
-        y_t=time0,
         method=method,
         dt=dt,
         **kwargs,
@@ -183,8 +178,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
         y: pixel index y
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        kwargs: dictionary consisting of cut off frequency to decide window radius for running moments
-        and threshold value for conditional average. Default value is set to 2.5.
+        kwargs: threshold value for conditional average. Default value is set to 2.5.
 
     Returns:
         vx Radial velocity
@@ -221,8 +215,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
     Input:
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        kwargs: dictionary consisting of cut off frequency to decide window radius for running moments
-        and threshold value for conditional average. Default value is set to 2.5.
+        kwargs: threshold value for conditional average. Default value is set to 2.5.
 
     Returns:
         vx Radial velocities
