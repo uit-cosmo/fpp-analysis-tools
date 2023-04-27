@@ -233,8 +233,9 @@ def estimate_time_delay_ccond_av_max(
         events: Number of events larger than 2.5 the mean value
     """
 
-    threshold = kwargs["threshold"]
-    _, s_av, s_var, t_av, peaks, _ = cond_av(x, x_t, threshold, Sref=y)
+    min_threshold = kwargs["min_threshold"]
+    max_threshold = kwargs["max_threshold"]
+    _, s_av, s_var, t_av, peaks, _ = cond_av(x, x_t, min_threshold, max_threshold, Sref=y)
     max_index = np.argmax(s_av)
 
     return t_av[max_index], s_var[max_index], len(peaks)
