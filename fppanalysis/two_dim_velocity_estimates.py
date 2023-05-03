@@ -258,7 +258,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
             if method='cond_av': 
                 Conditional variance value at maximum cross conditional average for each pixel.
         R: Radial positions
-        Z: Radial positions
+        Z: Poloidal positions
     """
     shape = (len(ds.x.values), len(ds.y.values))
     vx = np.zeros(shape=shape)
