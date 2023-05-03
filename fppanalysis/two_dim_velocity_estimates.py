@@ -99,12 +99,14 @@ def _estimate_time_delay(
         delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
 
     elif method == "cond_av":
-        # c: conditional variance
         delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
             x=x,
             x_t=x_t,
             y=y,
-            **kwargs,
+            min_threshold=kwargs["min_threshold"],
+            max_threshold=kwargs["max_threshold"],
+            delta=kwargs["delta"],
+            window=kwargs["window"],
         )
         print(events)
 
@@ -167,23 +169,34 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
     ignored. Pixels outside the coordinate domain are ignored. Time delay
-    estimation is performed by maximizing the cross- correlation function. The
-    confidence of the estimation is a value in the interval (0, 1) given by the
+    estimation is performed by maximizing either the cross- correlation function
+    or cross conditional average function, which is specified in input argument 'method'. 
+    
+    If time delay estimation is performed by maximizing the cross correlation function,
+    the confidence of the estimation is a value in the interval (0, 1) given by the
     mean of the confidences for each combination, which is given by the minimum
     of the maximums of the two cross-correlations involved (good luck
     understanding this last sentence :))
+    
+    If time delay estimation is performed by maximizing the cross conditional average function,
+    the confidence of the estimation is a value in the interval (0, 1) given by the 
+    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance. 
 
     Input:
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        kwargs: threshold value for conditional average. Default value is set to 2.5.
+        kwargs: kwargs used in 'cond_av'
+            - min_threshold: min threshold for conditional averaged events
+            - max_threshold: max threshold for conditional averaged events
+            - delta: If window = True, delta is the minimal distance between two peaks.
+            - window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
-        vx Radial velocity
-        vy Poloidal velocity
-        c Confidence on the estimation
+        vx: Radial velocity
+        vy: Poloidal velocity
+        c: Confidence on the estimation
     """
 
     h_neighbors = [(x - 1, y), (x + 1, y)]
@@ -206,23 +219,46 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
 
 def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
     """
-    Given a dataset ds with GPI data in a format produced by https://github.com/sajidah-ahmed/cmod_functions,
-    computed the velocity field. The estimation takes into account poloidal flows as described in
-    the 2D filament model. For each pixel, the velocities are estimated using the given pixel, and two neighbour
-    pixels: the right neighbour and the down neighbour. The return objects are matrices of the size of the
-    GPI grid, from which the velocity field can be easily plotted via f.e matplotlib.quiver.
+    Computes the velocity field of a given dataset ds with GPI data in a format produced by 
+    https://github.com/sajidah-ahmed/cmod_functions. The estimation takes into account 
+    poloidal flows as described in the 2D filament model. For each pixel, the velocities 
+    are estimated using the given pixel, and two neighbour pixels: the right neighbour and 
+    the down neighbour. The velocities are estimated from a time delay estimation performed
+    by maximizing either the cross- correlation function or cross conditional average function, 
+    which is specified in input argument 'method'.
+
+    If time delay estimation is performed by maximizing the cross correlation function,
+    the confidence of the estimation is a value in the interval (0, 1) given by the
+    mean of the confidences for each combination, which is given by the minimum
+    of the maximums of the two cross-correlations involved (good luck
+    understanding this last sentence :))
+    
+    If time delay estimation is performed by maximizing the cross conditional average function,
+    the confidence of the estimation is a value in the interval (0, 1) given by the 
+    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance. 
+
+    The return objects are matrices of the size of the GPI grid, 
+    from which the velocity field can be easily plotted via f.e matplotlib.quiver.
 
     Input:
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        kwargs: threshold value for conditional average. Default value is set to 2.5.
+        kwargs: kwargs used in 'cond_av'
+            - min_threshold: min threshold for conditional averaged events
+            - max_threshold: max threshold for conditional averaged events
+            - delta: If window = True, delta is the minimal distance between two peaks.
+            - window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
-        vx Radial velocities
-        vy Poloidal velocities
-        confidences Maximum value of the cross-correlations at each pixel.
-        R Radial positions
-        Z Radial positions
+        vx: Radial velocities
+        vy: Poloidal velocities
+        confidences: 
+            if method='cross_corr': 
+                Maximum value of the cross-correlations at each pixel.
+            if method='cond_av': 
+                Conditional variance value at maximum cross conditional average for each pixel.
+        R: Radial positions
+        Z: Radial positions
     """
     shape = (len(ds.x.values), len(ds.y.values))
     vx = np.zeros(shape=shape)
