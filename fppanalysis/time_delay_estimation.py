@@ -215,7 +215,7 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
 
 
 def estimate_time_delay_ccond_av_max(
-    x: np.ndarray, x_t: np.ndarray, y: np.ndarray, **kwargs
+    x: np.ndarray, x_t: np.ndarray, y: np.ndarray, min_threshold, max_threshold, delta, window
 ):
     """Estimates the average time delay by finding the time lag that maximizies
     the cross conditional average of signal x when signal y is larger than
@@ -226,22 +226,16 @@ def estimate_time_delay_ccond_av_max(
         x: Signal to be conditionally averaged
         x_t: Time base of signal x
         y: Reference signal
-        kwargs:
-            - min_threshold: min threshold for conditional averaged events
-            - max_threshold: max threshold for conditional averaged events
-            - delta: If window = True, delta is the minimal distance between two peaks.
-            - window: [bool] If True, delta also gives the minimal distance between peaks.
+        min_threshold: min threshold for conditional averaged events
+        max_threshold: max threshold for conditional averaged events
+        delta: If window = True, delta is the minimal distance between two peaks.
+        window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
         td: Estimated time delay
         C: Cross conditional variance at a time lag td.
         events: Number of events larger than 2.5 the mean value
     """
-
-    min_threshold = kwargs["min_threshold"]
-    max_threshold = kwargs["max_threshold"]
-    delta = kwargs["delta"]
-    window = kwargs["window"]
     _, s_av, s_var, t_av, peaks, _ = cond_av(
         x,
         x_t,
