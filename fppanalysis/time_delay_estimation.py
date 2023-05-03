@@ -227,10 +227,10 @@ def estimate_time_delay_ccond_av_max(
         x_t: Time base of signal x
         y: Reference signal
         kwargs:
-            - min_threshold for conditional averaged events
-            - max_threshold for conditional averaged events
+            - min_threshold: min threshold for conditional averaged events
+            - max_threshold: max threshold for conditional averaged events
             - delta: If window = True, delta is the minimal distance between two peaks.
-            - window: bool. If True, delta also gives the minimal distance between peaks.
+            - window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
         td: Estimated time delay
