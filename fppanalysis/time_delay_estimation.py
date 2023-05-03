@@ -226,6 +226,11 @@ def estimate_time_delay_ccond_av_max(
         x: Signal to be conditionally averaged
         x_t: Time base of signal x
         y: Reference signal
+        kwargs:
+            - min_threshold for conditional averaged events
+            - max_threshold for conditional averaged events
+            - delta: If window = True, delta is the minimal distance between two peaks.
+            - window: bool. If True, delta also gives the minimal distance between peaks.
 
     Returns:
         td: Estimated time delay
@@ -235,7 +240,17 @@ def estimate_time_delay_ccond_av_max(
 
     min_threshold = kwargs["min_threshold"]
     max_threshold = kwargs["max_threshold"]
-    _, s_av, s_var, t_av, peaks, _ = cond_av(x, x_t, smin=min_threshold, smax=max_threshold, Sref=y)
+    delta = kwargs["delta"]
+    window = kwargs["window"]
+    _, s_av, s_var, t_av, peaks, _ = cond_av(
+        x,
+        x_t,
+        smin=min_threshold,
+        smax=max_threshold,
+        Sref=y,
+        delta=delta,
+        window=window,
+    )
     max_index = np.argmax(s_av)
 
     return t_av[max_index], s_var[max_index], len(peaks)
