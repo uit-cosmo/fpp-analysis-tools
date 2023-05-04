@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
 from fppanalysis.conditional_averaging import cond_av
-from fppanalysis.running_moments import run_norm, window_radius
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
@@ -201,7 +200,7 @@ def estimate_delays(
 
 def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     """Estimates the average time delay between to signals by finding the time
-    lag that maximizies the cross-correlation function.
+    lag that maximizes the cross-correlation function.
 
     Returns:
         td Estimated time delay
@@ -215,9 +214,9 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
 
 
 def estimate_time_delay_ccond_av_max(
-    x: np.ndarray, x_t: np.ndarray, y: np.ndarray, min_threshold, max_threshold, delta, window
+    x: np.ndarray, x_t: np.ndarray, y: np.ndarray, min_threshold, max_threshold=None, delta=None, window=False
 ):
-    """Estimates the average time delay by finding the time lag that maximizies
+    """Estimates the average time delay by finding the time lag that maximizes
     the cross conditional average of signal x when signal y is larger than
     threshold. Returns also the cross conditional variance at this maximum, and
     number of conditional averaged events.
