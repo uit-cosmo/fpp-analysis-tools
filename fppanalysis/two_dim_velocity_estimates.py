@@ -108,7 +108,6 @@ def _estimate_time_delay(
             delta=kwargs["delta"],
             window=kwargs["window"],
         )
-        print(events)
 
     else:
         raise Exception("Method must be either cross_corr or cond_av")
@@ -260,6 +259,9 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
         R: Radial positions
         Z: Poloidal positions
     """
+    # if method == 'cond_av':
+    #     assert 
+    print(kwargs.keys())
     shape = (len(ds.x.values), len(ds.y.values))
     vx = np.zeros(shape=shape)
     vy = np.zeros(shape=shape)
@@ -277,7 +279,7 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
                     "Issues estimating velocity for pixel",
                     i,
                     j,
-                    "Run estimate_velocities_for_pixel(i, j, ds) to get a detailed error stacktrace",
+                    "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
                 )
 
     vx[np.isnan(vx) | np.isinf(vx)] = 0
