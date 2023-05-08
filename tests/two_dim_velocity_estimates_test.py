@@ -9,7 +9,6 @@ def make_2d_realization(
 ):
     bf = DefaultBlobFactory(
         A_dist="deg",
-        W_dist="deg",
         vx_dist="deg",
         vy_dist="deg",
         vy_parameter=vy,
@@ -64,6 +63,28 @@ def test_rad_and_2pol():
     v, w = 1, 2
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     v_est, w_est, _ = td.estimate_velocities_for_pixel(1, 1, ds)
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
+
+
+def test_cond_av():
+    v, w = 1, -1
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    method = "cond_av"
+    min_threshold = 2.5
+    max_threshold = np.inf
+    delta = 5
+    window = True
+    v_est, w_est, _ = td.estimate_velocities_for_pixel(
+        1,
+        1,
+        ds,
+        method=method,
+        min_threshold=min_threshold,
+        max_threshold=max_threshold,
+        delta=delta,
+        window=window,
+    )
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
 
