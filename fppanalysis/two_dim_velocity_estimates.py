@@ -163,7 +163,7 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: dict):
+def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str = 'cross_corr', **kwargs: dict):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
@@ -216,7 +216,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str, **kwargs: d
     return mean_vx, mean_vy, confidence
 
 
-def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
+def estimate_velocity_field(ds: xr.Dataset, method: str = 'cross_corr', **kwargs: dict):
     """
     Computes the velocity field of a given dataset ds with GPI data in a format produced by 
     https://github.com/sajidah-ahmed/cmod_functions. The estimation takes into account 
@@ -259,9 +259,8 @@ def estimate_velocity_field(ds: xr.Dataset, method: str, **kwargs: dict):
         R: Radial positions
         Z: Poloidal positions
     """
-    # if method == 'cond_av':
-    #     assert 
-    print(kwargs.keys())
+    if method == "cond_av":
+        assert {"min_threshold", "max_threshold", "delta", "window"} <= kwargs.keys(), "Arguments must be provided: min_threshold, max_threshold, delta, window"
     shape = (len(ds.x.values), len(ds.y.values))
     vx = np.zeros(shape=shape)
     vy = np.zeros(shape=shape)
