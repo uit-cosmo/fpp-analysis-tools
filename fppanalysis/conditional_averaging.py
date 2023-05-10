@@ -44,7 +44,7 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False, print_ve
 
     places = np.where(sgnl > smin)[0]
     assert len(places) > 0, "No conditional events"
-    if print_verbose == True:
+    if print_verbose:
         print("places to check:{}".format(len(places)), flush=True)
     dplaces = np.diff(places)
     split = np.where(dplaces != 1)[0]
@@ -144,7 +144,7 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False, print_ve
     # For a completely random signal, <f^2> >> <f>^2 and CV = 1.
     # OBS: We return 1-CV = <f>^2/<f^2>.
     s_var = s_av ** 2 / np.mean(s_tmp ** 2, axis=1)
-    if print_verbose == True:
+    if print_verbose:
         print("conditional events:{}".format(len(peaks)), flush=True)
         if badcount > 0:
             print("bursts where the recorded peak is not the largest:" + str(badcount))
