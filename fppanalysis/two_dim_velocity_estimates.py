@@ -229,9 +229,8 @@ def estimate_velocity_field(ds: xr.Dataset, method: str = 'cross_corr', **kwargs
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
     mean of the confidences for each combination, which is given by the minimum
-    of the maximums of the two cross-correlations involved (good luck
-    understanding this last sentence :))
-    
+    of the maximums of the two cross-correlations involved.
+
     If time delay estimation is performed by maximizing the cross conditional average function,
     the confidence of the estimation is a value in the interval (0, 1) given by the 
     cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance. 

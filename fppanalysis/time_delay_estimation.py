@@ -237,9 +237,9 @@ def estimate_time_delay_ccond_av_max(
         window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
-        td: Estimated time delay
-        C: Cross conditional variance at a time lag td.
-        events: Number of events larger than 2.5 the mean value
+        float: Estimated time delay
+        float: Cross conditional variance at a time lag td.
+        int: Number of events larger than 2.5 the mean value
     """
     _, s_av, s_var, t_av, peaks, _ = cond_av(
         x,
