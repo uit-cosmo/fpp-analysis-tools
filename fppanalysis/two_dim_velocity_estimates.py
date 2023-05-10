@@ -269,7 +269,7 @@ def estimate_velocities_for_pixel(
     ]
     results = [r for r in results if r is not None]
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
-        return None, None, None
+        return PixelData()
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
