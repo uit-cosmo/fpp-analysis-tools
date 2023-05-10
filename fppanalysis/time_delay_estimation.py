@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
+from fppanalysis.conditional_averaging import cond_av
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
@@ -198,9 +199,9 @@ def estimate_delays(
 
 
 def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
-    """
-    Estimates the average time delay between to signals by finding the time lag that maximizies the
-    cross-correlation function.
+    """Estimates the average time delay between to signals by finding the time
+    lag that maximizes the cross-correlation function.
+
     Returns:
         td Estimated time delay
         C Cross correlation at a time lag td.
@@ -210,6 +211,48 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
     return ccf_times[max_index], ccf[max_index]
+
+
+def estimate_time_delay_ccond_av_max(
+    x: np.ndarray,
+    x_t: np.ndarray,
+    y: np.ndarray,
+    min_threshold: float = None,
+    max_threshold: float = None,
+    delta: float = None,
+    window: bool = False,
+):
+    """Estimates the average time delay by finding the time lag that maximizes
+    the cross conditional average of signal x when signal y is larger than
+    threshold. Returns also the cross conditional variance at this maximum, and
+    number of conditional averaged events.
+
+    Input:
+        x: Signal to be conditionally averaged
+        x_t: Time base of signal x
+        y: Reference signal
+        min_threshold: min threshold for conditional averaged events
+        max_threshold: max threshold for conditional averaged events
+        delta: If window = True, delta is the minimal distance between two peaks.
+        window: [bool] If True, delta also gives the minimal distance between peaks.
+
+    Returns:
+        td: Estimated time delay
+        C: Cross conditional variance at a time lag td.
+        events: Number of events larger than 2.5 the mean value
+    """
+    _, s_av, s_var, t_av, peaks, _ = cond_av(
+        x,
+        x_t,
+        smin=min_threshold,
+        smax=max_threshold,
+        Sref=y,
+        delta=delta,
+        window=window,
+    )
+    max_index = np.argmax(s_av)
+
+    return t_av[max_index], s_var[max_index], len(peaks)
 
 
 def get_avg_velocity_from_time_delays(
