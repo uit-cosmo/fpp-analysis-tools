@@ -71,7 +71,7 @@ def run_moment(S, radius, moment=1, T=None):
         rm = run_mean(S, radius)
         tmp = S[radius:-radius] - rm
 
-        r_skew = run_mean(tmp ** 3, radius) / run_mean(tmp ** 2, radius) ** 1.5
+        r_skew = run_mean(tmp**3, radius) / run_mean(tmp**2, radius) ** 1.5
         if T is None:
             return r_skew, S[2 * radius : -2 * radius]
         else:
@@ -81,7 +81,7 @@ def run_moment(S, radius, moment=1, T=None):
         rm = run_mean(S, radius)
         tmp = S[radius:-radius] - rm
 
-        r_flat = run_mean(tmp ** 4, radius) / run_mean(tmp ** 2, radius) ** 2
+        r_flat = run_mean(tmp**4, radius) / run_mean(tmp**2, radius) ** 2
         if T is None:
             return r_flat, S[2 * radius : -2 * radius]
         else:
@@ -89,9 +89,8 @@ def run_moment(S, radius, moment=1, T=None):
 
 
 def run_norm(S, radius, T=None, return_run_moment=False):
-    """
-    Performs the standard running normalization on S by subtracting
-    a running mean and dividing by a running standard deviation.
+    """Performs the standard running normalization on S by subtracting a
+    running mean and dividing by a running standard deviation.
 
     All outputs are returned with a size M=N-4*radius, corresponding to the
     running standard deviation.
@@ -137,3 +136,16 @@ def run_norm(S, radius, T=None, return_run_moment=False):
         res = res[0]
 
     return res
+
+
+def window_radius(cut_off_freq, time):
+    """Returns window radius used in running moments and normalization
+    given a cut off frequency. Time step, dt, is computed from time.
+    """
+    import numpy as np
+
+    dt = np.diff(time)[0]
+    t_run_mean = 1 / cut_off_freq
+    samples = ((t_run_mean / dt) - 1) / 2
+
+    return int(samples)

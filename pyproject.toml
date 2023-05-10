@@ -15,6 +15,8 @@ tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
 matplotlib = "^3.6.3"
 mpmath = "^1.2.1"
+blobmodel = "^0.1.1"
+xarray = "^0.21.1"
 
 [build-system]
 requires = ["poetry-core"]
