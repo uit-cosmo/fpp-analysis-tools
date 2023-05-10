@@ -1,6 +1,63 @@
 import fppanalysis.time_delay_estimation as tde
 import numpy as np
 import xarray as xr
+from dataclasses import dataclass
+
+
+@dataclass
+class PixelData:
+    """Data class containing estimated data from a single pixel."""
+
+    r_pos: float = 0
+    z_pos: float = 0
+    vx: float = 0
+    vy: float = 0
+    confidence: float = 0
+    events: int = 0
+
+
+class MovieData:
+    """Class containing estimated data for all pixels in a set."""
+
+    def __init__(self, range_r, range_z, func):
+        self.r_dim = len(range_r)
+        self.z_dim = len(range_z)
+        self.pixels = [[PixelData() for i in range_r] for j in range_z]
+
+        for i in range_r:
+            for j in range_z:
+                try:
+                    self.pixels[i][j] = func(i, j)
+                except:
+                    print(
+                        "Issues estimating velocity for pixel",
+                        i,
+                        j,
+                        "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+                    )
+
+    def _get_field(self, field_name):
+        return np.array(
+            [[getattr(p, field_name) for p in pixel_row] for pixel_row in self.pixels]
+        )
+
+    def get_vx(self):
+        return self._get_field("vx")
+
+    def get_vy(self):
+        return self._get_field("vy")
+
+    def get_R(self):
+        return self._get_field("r_pos")
+
+    def get_Z(self):
+        return self._get_field("z_pos")
+
+    def get_events(self):
+        return self._get_field("events")
+
+    def get_confidences(self):
+        return self._get_field("confidence")
 
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
@@ -96,7 +153,7 @@ def _estimate_time_delay(
 ):
 
     if method == "cross_corr":
-        delta_t, c = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt)
+        (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
 
     elif method == "cond_av":
         delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
@@ -112,7 +169,7 @@ def _estimate_time_delay(
     else:
         raise Exception("Method must be either cross_corr or cond_av")
 
-    return delta_t, c
+    return delta_t, c, events
 
 
 def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dict):
@@ -134,7 +191,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
     if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
         return None
 
-    delta_ty, cy = _estimate_time_delay(
+    delta_ty, cy, events_y = _estimate_time_delay(
         x=signal2,
         x_t=time2,
         y=signal0,
@@ -142,7 +199,7 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
         dt=dt,
         **kwargs,
     )
-    delta_tx, cx = _estimate_time_delay(
+    delta_tx, cx, events_x = _estimate_time_delay(
         x=signal1,
         x_t=time1,
         y=signal0,
@@ -152,10 +209,12 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
     )
 
     confidence = min(cx, cy)
+    events = min(events_x, events_y)
 
     return (
         *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
         confidence,
+        events,
     )
 
 
@@ -163,23 +222,26 @@ def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
-def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str = 'cross_corr', **kwargs: dict):
+def estimate_velocities_for_pixel(
+    x, y, ds: xr.Dataset, method: str = "cross_corr", **kwargs: dict
+):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
     (x, y+1), (x+1, y) and (x, y-1). Dead-pixels (stored as np.nan arrays) are
     ignored. Pixels outside the coordinate domain are ignored. Time delay
-    estimation is performed by maximizing either the cross- correlation function
-    or cross conditional average function, which is specified in input argument 'method'. 
-    
+    estimation is performed by maximizing either the cross- correlation
+    function or cross conditional average function, which is specified in input
+    argument 'method'.
+
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
     mean of the confidences for each combination, which is given by the minimum
     of the maximums of the two cross-correlations involved (good luck
     understanding this last sentence :))
-    
+
     If time delay estimation is performed by maximizing the cross conditional average function,
-    the confidence of the estimation is a value in the interval (0, 1) given by the 
-    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance. 
+    the confidence of the estimation is a value in the interval (0, 1) given by the
+    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance.
 
     Input:
         x: pixel index x
@@ -193,9 +255,7 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str = 'cross_cor
             - window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
-        vx: Radial velocity
-        vy: Poloidal velocity
-        c: Confidence on the estimation
+        PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
 
     h_neighbors = [(x - 1, y), (x + 1, y)]
@@ -213,18 +273,31 @@ def estimate_velocities_for_pixel(x, y, ds: xr.Dataset, method: str = 'cross_cor
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
-    return mean_vx, mean_vy, confidence
+    events = sum(map(lambda r: r[3], results)) / len(results)
+    r_pos, z_pos = _get_rz(x, y, ds)
+
+    return PixelData(
+        r_pos=r_pos,
+        z_pos=z_pos,
+        vx=mean_vx,
+        vy=mean_vy,
+        confidence=confidence,
+        events=events,
+    )
 
 
-def estimate_velocity_field(ds: xr.Dataset, method: str = 'cross_corr', **kwargs: dict):
-    """
-    Computes the velocity field of a given dataset ds with GPI data in a format produced by 
-    https://github.com/sajidah-ahmed/cmod_functions. The estimation takes into account 
-    poloidal flows as described in the 2D filament model. For each pixel, the velocities 
-    are estimated using the given pixel, and two neighbour pixels: the right neighbour and 
-    the down neighbour. The velocities are estimated from a time delay estimation performed
-    by maximizing either the cross- correlation function or cross conditional average function, 
-    which is specified in input argument 'method'.
+def estimate_velocity_field(
+    ds: xr.Dataset, method: str = "cross_corr", **kwargs: dict
+) -> MovieData:
+    """Computes the velocity field of a given dataset ds with GPI data in a
+    format produced by https://github.com/sajidah-ahmed/cmod_functions. The
+    estimation takes into account poloidal flows as described in the 2D
+    filament model. For each pixel, the velocities are estimated using the
+    given pixel, and two neighbour pixels: the right neighbour and the down
+    neighbour. The velocities are estimated from a time delay estimation
+    performed by maximizing either the cross- correlation function or cross
+    conditional average function, which is specified in input argument
+    'method'.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -232,10 +305,10 @@ def estimate_velocity_field(ds: xr.Dataset, method: str = 'cross_corr', **kwargs
     of the maximums of the two cross-correlations involved.
 
     If time delay estimation is performed by maximizing the cross conditional average function,
-    the confidence of the estimation is a value in the interval (0, 1) given by the 
-    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance. 
+    the confidence of the estimation is a value in the interval (0, 1) given by the
+    cross conditional variance for each event. OBS: We return 1-CV for cross conditional variance.
 
-    The return objects are matrices of the size of the GPI grid, 
+    The return objects are matrices of the size of the GPI grid,
     from which the velocity field can be easily plotted via f.e matplotlib.quiver.
 
     Input:
@@ -248,38 +321,21 @@ def estimate_velocity_field(ds: xr.Dataset, method: str = 'cross_corr', **kwargs
             - window: [bool] If True, delta also gives the minimal distance between peaks.
 
     Returns:
-        vx: Radial velocities
-        vy: Poloidal velocities
-        confidences: 
-            if method='cross_corr': 
-                Maximum value of the cross-correlations at each pixel.
-            if method='cond_av': 
-                Conditional variance value at maximum cross conditional average for each pixel.
-        R: Radial positions
-        Z: Poloidal positions
+        movie_data: Class containing estimation data about all pixels
     """
     if method == "cond_av":
-        assert {"min_threshold", "max_threshold", "delta", "window"} <= kwargs.keys(), "Arguments must be provided: min_threshold, max_threshold, delta, window"
-    shape = (len(ds.x.values), len(ds.y.values))
-    vx = np.zeros(shape=shape)
-    vy = np.zeros(shape=shape)
-    confidences = np.zeros(shape=shape)
-    R, Z = _get_rz_full(ds)
+        assert {
+            "min_threshold",
+            "max_threshold",
+            "delta",
+            "window",
+        } <= kwargs.keys(), (
+            "Arguments must be provided: min_threshold, max_threshold, delta, window"
+        )
 
-    for i in range(0, shape[0]):
-        for j in range(0, shape[1]):
-            try:
-                vx[i, j], vy[i, j], confidences[i, j] = estimate_velocities_for_pixel(
-                    i, j, ds, method, **kwargs
-                )
-            except:
-                print(
-                    "Issues estimating velocity for pixel",
-                    i,
-                    j,
-                    "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-                )
-
-    vx[np.isnan(vx) | np.isinf(vx)] = 0
-    vy[np.isnan(vy) | np.isinf(vy)] = 0
-    return vx, vy, confidences, R, Z
+    movie_data = MovieData(
+        range(0, len(ds.x.values)),
+        range(0, len(ds.y.values)),
+        lambda i, j: estimate_velocities_for_pixel(i, j, ds, method, **kwargs),
+    )
+    return movie_data
