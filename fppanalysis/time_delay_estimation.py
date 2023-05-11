@@ -249,6 +249,7 @@ def estimate_time_delay_ccond_av_max(
         Sref=y,
         delta=delta,
         window=window,
+        print_verbose=False,
     )
     max_index = np.argmax(s_av)
 
