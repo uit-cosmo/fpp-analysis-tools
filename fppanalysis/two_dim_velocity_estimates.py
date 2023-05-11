@@ -22,7 +22,7 @@ class MovieData:
     def __init__(self, range_r, range_z, func):
         self.r_dim = len(range_r)
         self.z_dim = len(range_z)
-        self.pixels = [[PixelData() for i in range_r] for j in range_z]
+        self.pixels = [[PixelData() for i in range_z] for j in range_r]
 
         for i in range_r:
             for j in range_z:
