@@ -17,7 +17,10 @@ class PixelData:
 
 
 class MovieData:
-    """Class containing estimated data for all pixels in a set."""
+    """Class containing estimated data for all pixels in a set.
+    Use getters to retrieve vx (radial velocity), vy (poloidal velocity), R (radial position),
+    Z (poloidal position), confidences (confidence of the estimation method) and events (number of identified
+    events in the case of method=cond_av)."""
 
     def __init__(self, range_r, range_z, func):
         self.r_dim = len(range_r)
