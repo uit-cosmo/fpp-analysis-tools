@@ -28,7 +28,9 @@ class PixelData:
 
 
 class MovieData:
-    """Class containing estimated data for all pixels in a set.
+    """Class containing estimated data for all pixels in a set. Return object
+    from estimate_velocity_field function, the indexing format of MovieData
+    matches that of the dataset input of estimate_velocity_field.
 
     Use getters to retrieve:
         vx: Radial velocities
@@ -40,6 +42,8 @@ class MovieData:
                 Conditional variance value at maximum cross conditional average for each pixel.
         R: Radial positions
         Z: Poloidal positions
+
+    Dead pixels have empty PixelData (null vx and vy).
     """
 
     def __init__(self, range_r, range_z, func):
