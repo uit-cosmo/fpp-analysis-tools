@@ -6,7 +6,18 @@ from dataclasses import dataclass
 
 @dataclass
 class PixelData:
-    """Data class containing estimated data from a single pixel."""
+    """Data class containing estimated data from a single pixel.
+
+    vx: Radial velocities
+    vy: Poloidal velocities
+    confidences:
+        if method='cross_corr':
+            Maximum value of the cross-correlations at each pixel.
+        if method='cond_av':
+            Conditional variance value at maximum cross conditional average for each pixel.
+    R: Radial positions
+    Z: Poloidal positions
+    """
 
     r_pos: float = 0
     z_pos: float = 0
@@ -18,9 +29,18 @@ class PixelData:
 
 class MovieData:
     """Class containing estimated data for all pixels in a set.
-    Use getters to retrieve vx (radial velocity), vy (poloidal velocity), R (radial position),
-    Z (poloidal position), confidences (confidence of the estimation method) and events (number of identified
-    events in the case of method=cond_av)."""
+
+    Use getters to retrieve:
+        vx: Radial velocities
+        vy: Poloidal velocities
+        confidences:
+            if method='cross_corr':
+                Maximum value of the cross-correlations at each pixel.
+            if method='cond_av':
+                Conditional variance value at maximum cross conditional average for each pixel.
+        R: Radial positions
+        Z: Poloidal positions
+    """
 
     def __init__(self, range_r, range_z, func):
         self.r_dim = len(range_r)
@@ -239,8 +259,7 @@ def estimate_velocities_for_pixel(
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
     mean of the confidences for each combination, which is given by the minimum
-    of the maximums of the two cross-correlations involved (good luck
-    understanding this last sentence :))
+    of the maximums of the two cross-correlations involved.
 
     If time delay estimation is performed by maximizing the cross conditional average function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
