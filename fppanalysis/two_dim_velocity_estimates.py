@@ -223,7 +223,7 @@ def _estimate_time_delay(
     return delta_t, c, events
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dict):
+def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, naive: bool = False, **kwargs: dict):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
@@ -262,11 +262,18 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dic
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    return (
-        *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
-        confidence,
-        events,
-    )
+    if naive:
+        return (
+            *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
+    else:
+        return (
+            *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
 
 
 def _is_within_boundaries(p, ds):
