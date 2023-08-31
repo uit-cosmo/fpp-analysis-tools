@@ -110,6 +110,30 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     fy = delta_y / delta_ty
     return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
 
+def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
+    """
+    Estimates radial and poloidal velocities from naive method 
+    given the input parameters:
+    Input:
+         delta_tx Estimation of the time delay between radially separated points.
+         delta_ty Estimation of the time delay between poloidally separated points.
+         delta_x Spatial separation between radially separated points.
+         delta_y Spatial separation between poloidally separated points.
+
+    These quantities should be obtained from two pixel points: 
+        radial direction: a reference pixel point and a pixel point separated radially
+        poloidal direction: a reference pixel point and a pixel point separated poloidally.
+    Returns:
+         vx Radial velocity
+         vy Poloidal velocity
+    """
+    if delta_tx == 0:
+        return 0, delta_y / delta_ty
+    if delta_ty == 0:
+        return delta_x / delta_tx, 0
+    fx = delta_x / delta_tx
+    fy = delta_y / delta_ty
+    return fx, fy 
 
 def _get_rz(x, y, ds):
     # Sajidah's format
