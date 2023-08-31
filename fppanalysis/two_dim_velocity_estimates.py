@@ -262,18 +262,14 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, naive: bool =
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    if naive:
-        return (
-            *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
-            confidence,
-            events,
-        )
-    else:
-        return (
-            *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
-            confidence,
-            events,
-        )
+    velocities_1d = get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0)
+    velocities_2d = get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0)
+    
+    return (
+        velocities_1d if not naive else velocities_2d,
+        confidence,
+        events,
+    )
 
 
 def _is_within_boundaries(p, ds):
