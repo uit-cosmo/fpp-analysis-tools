@@ -131,8 +131,10 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
         return 0, delta_y / delta_ty
     if delta_ty == 0:
         return delta_x / delta_tx, 0
+    print(f"delta_tx: {delta_tx}, delta_ty: {delta_ty}, delta_x: {delta_x}, delta_y: {delta_y}")
     fx = delta_x / delta_tx
     fy = delta_y / delta_ty
+    print(f"fx: {fx}, fy: {fy}")
     return fx, fy 
 
 def _get_rz(x, y, ds):
