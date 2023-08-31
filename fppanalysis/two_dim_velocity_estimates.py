@@ -108,6 +108,8 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
         return delta_x / delta_tx, 0
     fx = delta_x / delta_tx
     fy = delta_y / delta_ty
+    print(f"delta_tx: {delta_tx}, delta_ty: {delta_ty}, delta_x: {delta_x}, delta_y: {delta_y}")
+    print(f"fx: {fx / (1 + (fx / fy) ** 2)}, fy: {fy / (1 + (fy / fx) ** 2)}")
     return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
 
 def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
@@ -225,7 +227,7 @@ def _estimate_time_delay(
     return delta_t, c, events
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, naive: bool, **kwargs: dict):
+def _estimate_velocities_given_points(p0, p1, p2, ds, naive: bool, method: str, **kwargs: dict):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
@@ -279,7 +281,7 @@ def _is_within_boundaries(p, ds):
 
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, method: str = "cross_corr", naive: bool = False, **kwargs: dict
+    x, y, ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -343,7 +345,7 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, method: str = "cross_corr", naive: bool = False, **kwargs: dict
+    ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
 ) -> MovieData:
     """Computes the velocity field of a given dataset ds with GPI data in a
     format produced by https://github.com/sajidah-ahmed/cmod_functions. The
@@ -393,6 +395,6 @@ def estimate_velocity_field(
     movie_data = MovieData(
         range(0, len(ds.x.values)),
         range(0, len(ds.y.values)),
-        lambda i, j: estimate_velocities_for_pixel(i, j, ds, method, naive, **kwargs),
+        lambda i, j: estimate_velocities_for_pixel(i, j, ds, naive, method, **kwargs),
     )
     return movie_data
