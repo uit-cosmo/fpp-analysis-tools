@@ -319,7 +319,7 @@ def estimate_velocities_for_pixel(
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, method, naive, **kwargs)
+        _estimate_velocities_given_points((x, y), px, py, ds, naive, method, **kwargs)
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
