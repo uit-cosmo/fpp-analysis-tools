@@ -46,7 +46,7 @@ def update_geometry(x_grid, y_grid, model):
 def test_rad_and_pol():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, True)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -58,7 +58,7 @@ def test_rad_and_pol():
 def test_full():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7, 8]), np.array([5, 6, 7, 8]))
-    movie_data = td.estimate_velocity_field(ds)
+    movie_data = td.estimate_velocity_field(ds, True)
     vx = movie_data.get_vx()
     assert np.max(np.abs(vx - np.ones(shape=(4, 4)))) < 0.1, "Numerical error too big"
 
@@ -66,7 +66,7 @@ def test_full():
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, True)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -78,7 +78,7 @@ def test_rad_and_neg_pol():
 def test_rad_and_2pol():
     v, w = 1, 2
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, True)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -99,6 +99,7 @@ def test_cond_av():
         1,
         1,
         ds,
+        True,
         method=method,
         min_threshold=min_threshold,
         max_threshold=max_threshold,
@@ -136,7 +137,7 @@ def test_ignore_dead_pixels():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
-    pd = td.estimate_velocities_for_pixel(1, 1, mock_ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, mock_ds, True)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
