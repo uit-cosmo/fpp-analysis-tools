@@ -121,21 +121,20 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          delta_x Spatial separation between radially separated points.
          delta_y Spatial separation between poloidally separated points.
 
-    These quantities should be obtained from two pixel points: 
-        radial direction: a reference pixel point and a pixel point separated radially
-        poloidal direction: a reference pixel point and a pixel point separated poloidally.
+    These quantities should be obtained from three pixel points: a reference pixel point,
+    a pixel point separated radially, and a pixel point separated poloidally.
     Returns:
          vx Radial velocity
          vy Poloidal velocity
     """
     if delta_tx == 0:
-        return 0, delta_y / delta_ty
+        return 0, 0
     if delta_ty == 0:
-        return delta_x / delta_tx, 0
+        return 0, 0
 
-    fx = delta_x / delta_tx
-    fy = delta_y / delta_ty
-    return fx, fy 
+    vx = delta_x / delta_tx
+    vy = delta_y / delta_ty
+    return vx, vy 
 
 def _get_rz(x, y, ds):
     # Sajidah's format
