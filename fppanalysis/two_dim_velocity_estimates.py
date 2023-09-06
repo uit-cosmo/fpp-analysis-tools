@@ -127,15 +127,10 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          vx Radial velocity
          vy Poloidal velocity
     """
-    vx = delta_x / delta_tx
-    vy = delta_y / delta_ty
+    vx = 0 if delta_tx == 0 else delta_x / delta_tx
+    vy = 0 if delta_ty == 0 else delta_y / delta_ty
 
     return vx, vy
-
-
-    vx = 
-    vy = delta_y / delta_ty
-    return vx, vy 
 
 def _get_rz(x, y, ds):
     # Sajidah's format
