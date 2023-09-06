@@ -127,12 +127,13 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          vx Radial velocity
          vy Poloidal velocity
     """
-    if delta_tx == 0:
-        return 0, 0
-    if delta_ty == 0:
-        return 0, 0
-
     vx = delta_x / delta_tx
+    vy = delta_y / delta_ty
+
+    return vx, vy
+
+
+    vx = 
     vy = delta_y / delta_ty
     return vx, vy 
 
@@ -224,7 +225,7 @@ def _estimate_time_delay(
     return delta_t, c, events
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, naive: bool, method: str, **kwargs: dict):
+def _estimate_velocities_given_points(p0, p1, p2, ds, use_2d_estimation: bool, method: str, **kwargs: dict):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
@@ -263,18 +264,24 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, naive: bool, method: str, 
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    if naive:
-        return *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
-    else:
+    if use_2d_estimation:
         return *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+    elif use_2d_estimation == False and (delta_tx == 0 or delta_ty == 0):
+        return np.nan
+    else:
+        return *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+        
 
 
 def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
+def _velocity_is_finite():
+
+
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
+    x, y, ds: xr.Dataset, use_2d_estimation: bool = True, method: str = "cross_corr", **kwargs: dict
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -298,7 +305,7 @@ def estimate_velocities_for_pixel(
         y: pixel index y
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        naive: [bool] If True, use 1D method to estimate velocities. If False, use 2D method.
+        use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -312,16 +319,18 @@ def estimate_velocities_for_pixel(
     h_neighbors = [(x - 1, y), (x + 1, y)]
     v_neighbors = [(x, y - 1), (x, y + 1)]
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, naive, method, **kwargs)
+        _estimate_velocities_given_points((x, y), px, py, ds, use_2d_estimation, method, **kwargs)
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
         if _is_within_boundaries(py, ds)
     ]
+    print(f'{results=}')
     results = [r for r in results if r is not None]
     r_pos, z_pos = _get_rz(x, y, ds)
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
         return PixelData(r_pos=r_pos, z_pos=z_pos)
+    
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
@@ -338,7 +347,7 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
+    ds: xr.Dataset, use_2d_estimation: bool = True, method: str = "cross_corr", **kwargs: dict
 ) -> MovieData:
     """Computes the velocity field of a given dataset ds with GPI data in a
     format produced by https://github.com/sajidah-ahmed/cmod_functions. The
@@ -365,7 +374,7 @@ def estimate_velocity_field(
     Input:
         ds: xarray Dataset
         method: 'cross_corr' or 'cond_av'
-        naive: [bool] If True, use 1D method to estimate velocities. If False, use 2D method.
+        use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -388,6 +397,6 @@ def estimate_velocity_field(
     movie_data = MovieData(
         range(0, len(ds.x.values)),
         range(0, len(ds.y.values)),
-        lambda i, j: estimate_velocities_for_pixel(i, j, ds, naive, method, **kwargs),
+        lambda i, j: estimate_velocities_for_pixel(i, j, ds, use_2d_estimation, method, **kwargs),
     )
     return movie_data
