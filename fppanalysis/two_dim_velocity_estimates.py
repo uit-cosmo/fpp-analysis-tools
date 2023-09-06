@@ -271,9 +271,6 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, use_2d_estimation: bool, m
 def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
-def _velocity_is_finite():
-
-
 
 def estimate_velocities_for_pixel(
     x, y, ds: xr.Dataset, use_2d_estimation: bool = True, method: str = "cross_corr", **kwargs: dict
