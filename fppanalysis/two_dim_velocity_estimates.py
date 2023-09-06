@@ -324,7 +324,8 @@ def estimate_velocities_for_pixel(
         return PixelData(r_pos=r_pos, z_pos=z_pos)
     
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
-    print(f'{map(lambda r: r[0], results)}')
+    res = map(lambda r: r[0], results)
+    print(f'{list(res)}=')
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
     events = sum(map(lambda r: r[3], results)) / len(results)
