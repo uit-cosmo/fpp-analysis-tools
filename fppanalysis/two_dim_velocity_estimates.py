@@ -317,13 +317,14 @@ def estimate_velocities_for_pixel(
         for py in v_neighbors
         if _is_within_boundaries(py, ds)
     ]
-    print(f'{results=}')
+    #if not use_2d_estimation and [rx for r[0,0] in results
     results = [r for r in results if r is not None]
     r_pos, z_pos = _get_rz(x, y, ds)
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
         return PixelData(r_pos=r_pos, z_pos=z_pos)
     
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
+    print(f'{map(lambda r: r[0], results)}')
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
     events = sum(map(lambda r: r[3], results)) / len(results)
