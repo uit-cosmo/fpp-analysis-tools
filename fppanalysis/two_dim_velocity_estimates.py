@@ -317,15 +317,35 @@ def estimate_velocities_for_pixel(
         for py in v_neighbors
         if _is_within_boundaries(py, ds)
     ]
-    #if not use_2d_estimation and [rx for r[0,0] in results
+    
+    if use_2d_estimation is not True:
+        # Horizontal left
+        if results[0,0] == np.nan:
+            h_neighbors = [(x - 2, y), (x + 1, y)]
+        # Horizontal right
+        if results[1,0] == np.nan:
+            h_neighbors = [(x - 1, y), (x + 2, y)]
+        # Vertical down
+        if results[2,0] == np.nan:
+            v_neighbors = [(x, y - 2), (x, y + 1)]
+        # Vertical up
+        if results[3,0] == np.nan:
+            v_neighbors = [(x, y - 1), (x, y + 2)]
+
+        results = [
+            _estimate_velocities_given_points((x, y), px, py, ds, use_2d_estimation, method, **kwargs)
+            for px in h_neighbors
+            if _is_within_boundaries(px, ds)
+            for py in v_neighbors
+            if _is_within_boundaries(py, ds)
+        ]
+        
     results = [r for r in results if r is not None]
     r_pos, z_pos = _get_rz(x, y, ds)
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
         return PixelData(r_pos=r_pos, z_pos=z_pos)
-    
+                                  
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
-    res = map(lambda r: r[0], results)
-    print(f'{list(res)}=')
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
     events = sum(map(lambda r: r[3], results)) / len(results)
