@@ -260,7 +260,9 @@ def estimate_velocities_for_pixel(
     ignored. Pixels outside the coordinate domain are ignored. Time delay
     estimation is performed by maximizing either the cross- correlation
     function or cross conditional average function, which is specified in input
-    argument 'method'.
+    argument 'method'. Setting 'method'='cross_corr_interpolate' will let interpolate
+    the cross-correlation function to find the maximum so that it is not
+    restricted to a multiple of the discretization time.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -275,7 +277,7 @@ def estimate_velocities_for_pixel(
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -325,7 +327,9 @@ def estimate_velocity_field(
     neighbour. The velocities are estimated from a time delay estimation
     performed by maximizing either the cross- correlation function or cross
     conditional average function, which is specified in input argument
-    'method'.
+    'method'. Setting 'method'='cross_corr_interpolate' will let interpolate
+    the cross-correlation function to find the maximum so that it is not
+    restricted to a multiple of the discretization time.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -341,7 +345,7 @@ def estimate_velocity_field(
 
     Input:
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
