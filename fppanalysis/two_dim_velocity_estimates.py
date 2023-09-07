@@ -178,24 +178,26 @@ def _estimate_time_delay(
     dt: float,
     **kwargs: dict
 ):
-
-    if method == "cross_corr":
-        (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
-
-    elif method == "cond_av":
-        delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
-            x=x,
-            x_t=x_t,
-            y=y,
-            min_threshold=kwargs["min_threshold"],
-            max_threshold=kwargs["max_threshold"],
-            delta=kwargs["delta"],
-            window=kwargs["window"],
-        )
-
-    else:
-        raise Exception("Method must be either cross_corr or cond_av")
-
+    match method:
+        case "cross_corr_interpolate":
+            (delta_t, c), events = (
+                tde.estimate_time_delay_ccmax_interpolate(x=x, y=y, dt=dt),
+                0,
+            )
+        case "cross_corr":
+            (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
+        case "cond_av":
+            delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
+                x=x,
+                x_t=x_t,
+                y=y,
+                min_threshold=kwargs["min_threshold"],
+                max_threshold=kwargs["max_threshold"],
+                delta=kwargs["delta"],
+                window=kwargs["window"],
+            )
+        case _:
+            raise Exception("Method must be either cross_corr or cond_av")
     return delta_t, c, events
 
 
