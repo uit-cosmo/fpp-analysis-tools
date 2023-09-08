@@ -1,3 +1,5 @@
+import warnings
+
 import fppanalysis.time_delay_estimation as tde
 import numpy as np
 import xarray as xr
@@ -121,7 +123,7 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          delta_x Spatial separation between radially separated points.
          delta_y Spatial separation between poloidally separated points.
 
-    These quantities should be obtained from two pixel points: 
+    These quantities should be obtained from two pixel points:
         radial direction: a reference pixel point and a pixel point separated radially
         poloidal direction: a reference pixel point and a pixel point separated poloidally.
     Returns:
@@ -194,12 +196,12 @@ def _get_time(x, y, ds):
 
 
 def _estimate_time_delay(
-    x: np.ndarray,
-    x_t: np.ndarray,
-    y: np.ndarray,
-    method: str,
-    dt: float,
-    **kwargs: dict,
+        x: np.ndarray,
+        x_t: np.ndarray,
+        y: np.ndarray,
+        method: str,
+        dt: float,
+        **kwargs: dict,
 ):
     match method:
         case "cross_corr_interpolate":
@@ -224,7 +226,9 @@ def _estimate_time_delay(
     return delta_t, c, events
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, use_2d_estimation: bool, method: str, **kwargs: dict):
+def _estimate_velocities_given_points(
+        p0, p1, p2, ds, use_2d_estimation: bool, method: str, **kwargs: dict
+):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
@@ -264,19 +268,91 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, use_2d_estimation: bool, m
     events = min(events_x, events_y)
 
     if use_2d_estimation:
-        return *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+        return (
+            *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
     elif use_2d_estimation == False and (delta_tx == 0 or delta_ty == 0):
         return np.nan
     else:
-        return *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+        return (
+            *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
 
 
 def _is_within_boundaries(p, ds):
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
 
 
+def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
+    """Returns true if the time lag that maximizes the cross-correlation
+    function measure at p0 and p1 is not zero
+    """
+    import fppanalysis.correlation_function as cf
+
+    signal0 = _get_signal(p0[0], p0[1], ds)
+    signal1 = _get_signal(p1[0], p1[1], ds)
+
+    if len(signal0) == 0 or len(signal1) == 0:
+        return False
+
+    ccf_times, ccf = cf.corr_fun(
+        signal0, signal1, dt=_get_dt(ds), biased=True, norm=True
+    )
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+    return np.abs(ccf_times[max_index]) >= neighbors_ccf_min_lag * _get_dt(ds)
+
+
+def _find_neighbors(x, y, ds: xr.Dataset, neighbors_ccf_min_lag: int):
+    warn = lambda n: warnings.warn(
+        "Pixel {} does not specify cross-correlation constrains with respect to {}."
+        " Updating".format(n, (x, y))
+    )
+
+    left = -1
+    while _is_within_boundaries((x + left, y), ds) and not _check_ccf_constrains(
+            (x, y), (x + left, y), ds, neighbors_ccf_min_lag
+    ):
+        warn((x + left, y))
+        left -= 1
+
+    right = 1
+    while _is_within_boundaries((x + right, y), ds) and not _check_ccf_constrains(
+            (x, y), (x + right, y), ds, neighbors_ccf_min_lag
+    ):
+        warn((x + right, y))
+        right += 1
+
+    up = 1
+    while _is_within_boundaries((x, y + up), ds) and not _check_ccf_constrains(
+            (x, y), (x, y + up), ds, neighbors_ccf_min_lag
+    ):
+        warn((x, y + up))
+        up += 1
+
+    down = -1
+    while _is_within_boundaries((x, y + down), ds) and not _check_ccf_constrains(
+            (x, y), (x, y + down), ds, neighbors_ccf_min_lag
+    ):
+        warn((x, y + down))
+        down -= 1
+
+    return [(x + left, y), (x + right, y)], [(x, y + down), (x, y + up)]
+
+
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, use_2d_estimation: bool = True, method: str = "cross_corr", **kwargs: dict
+        x,
+        y,
+        ds: xr.Dataset,
+        use_2d_estimation: bool = True,
+        method: str = "cross_corr",
+        neighbors_ccf_min_lag: int = 0,
+        **kwargs: dict,
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -301,8 +377,12 @@ def estimate_velocities_for_pixel(
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
         use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
+        neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
+        pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
+        time. If that's not the case, the next neighbor will be used, and so on until a
+        neighbor pixel is found complient to this condition.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -313,10 +393,11 @@ def estimate_velocities_for_pixel(
         PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
 
-    h_neighbors = [(x - 1, y), (x + 1, y)]
-    v_neighbors = [(x, y - 1), (x, y + 1)]
+    h_neighbors, v_neighbors = _find_neighbors(x, y, ds, neighbors_ccf_min_lag)
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, use_2d_estimation, method, **kwargs)
+        _estimate_velocities_given_points(
+            (x, y), px, py, ds, use_2d_estimation, method, **kwargs
+        )
         for px in h_neighbors
         if _is_within_boundaries(px, ds)
         for py in v_neighbors
@@ -327,7 +408,7 @@ def estimate_velocities_for_pixel(
     r_pos, z_pos = _get_rz(x, y, ds)
     if len(results) == 0:  # If (x,y) is dead we cannot estimate
         return PixelData(r_pos=r_pos, z_pos=z_pos)
-                                  
+
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
@@ -344,7 +425,11 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, use_2d_estimation: bool = True, method: str = "cross_corr", **kwargs: dict
+        ds: xr.Dataset,
+        use_2d_estimation: bool = True,
+        method: str = "cross_corr",
+        neighbors_ccf_min_lag: int = 0,
+        **kwargs: dict,
 ) -> MovieData:
     """Computes the velocity field of a given dataset ds with GPI data in a
     format produced by https://github.com/sajidah-ahmed/cmod_functions. The
@@ -372,8 +457,12 @@ def estimate_velocity_field(
 
     Input:
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
         use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
+        neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
+        pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
+        time. If that's not the case, the next neighbor will be used, and so on until a
+        neighbor pixel is found complient to this condition.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -385,17 +474,19 @@ def estimate_velocity_field(
     """
     if method == "cond_av":
         assert {
-            "min_threshold",
-            "max_threshold",
-            "delta",
-            "window",
-        } <= kwargs.keys(), (
+                   "min_threshold",
+                   "max_threshold",
+                   "delta",
+                   "window",
+               } <= kwargs.keys(), (
             "Arguments must be provided: min_threshold, max_threshold, delta, window"
         )
 
     movie_data = MovieData(
         range(0, len(ds.x.values)),
         range(0, len(ds.y.values)),
-        lambda i, j: estimate_velocities_for_pixel(i, j, ds, use_2d_estimation, method, **kwargs),
+        lambda i, j: estimate_velocities_for_pixel(
+            i, j, ds, use_2d_estimation, method, neighbors_ccf_min_lag, **kwargs
+        ),
     )
     return movie_data

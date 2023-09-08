@@ -156,3 +156,17 @@ def test_interpolate():
     )
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
+
+
+def test_neighbours():
+    v, w = 1.05, 1.05
+    ds = make_2d_realization(
+        v, w, np.array([5, 5.1, 5.2]), np.array([5, 5.1, 5.2]), dt=0.1
+    )
+    pd = td.estimate_velocities_for_pixel(0, 0, ds, neighbors_ccf_min_lag=1)
+    v_est, w_est, = (
+        pd.vx,
+        pd.vy,
+    )
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
