@@ -108,13 +108,12 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
         return delta_x / delta_tx, 0
     fx = delta_x / delta_tx
     fy = delta_y / delta_ty
-    print(f"delta_tx: {delta_tx}, delta_ty: {delta_ty}, delta_x: {delta_x}, delta_y: {delta_y}")
-    print(f"fx: {fx / (1 + (fx / fy) ** 2)}, fy: {fy / (1 + (fy / fx) ** 2)}")
     return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
+
 
 def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     """
-    Estimates radial and poloidal velocities from naive method 
+    Estimates radial and poloidal velocities from naive method
     given the input parameters:
     Input:
          delta_tx Estimation of the time delay between radially separated points.
@@ -122,7 +121,7 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          delta_x Spatial separation between radially separated points.
          delta_y Spatial separation between poloidally separated points.
 
-    These quantities should be obtained from two pixel points: 
+    These quantities should be obtained from two pixel points:
         radial direction: a reference pixel point and a pixel point separated radially
         poloidal direction: a reference pixel point and a pixel point separated poloidally.
     Returns:
@@ -133,11 +132,10 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
         return 0, delta_y / delta_ty
     if delta_ty == 0:
         return delta_x / delta_tx, 0
-    print(f"delta_tx: {delta_tx}, delta_ty: {delta_ty}, delta_x: {delta_x}, delta_y: {delta_y}")
     fx = delta_x / delta_tx
     fy = delta_y / delta_ty
-    print(f"fx: {fx}, fy: {fy}")
-    return fx, fy 
+    return fx, fy
+
 
 def _get_rz(x, y, ds):
     # Sajidah's format
@@ -204,30 +202,34 @@ def _estimate_time_delay(
     y: np.ndarray,
     method: str,
     dt: float,
-    **kwargs: dict
+    **kwargs: dict,
 ):
-
-    if method == "cross_corr":
-        (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
-
-    elif method == "cond_av":
-        delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
-            x=x,
-            x_t=x_t,
-            y=y,
-            min_threshold=kwargs["min_threshold"],
-            max_threshold=kwargs["max_threshold"],
-            delta=kwargs["delta"],
-            window=kwargs["window"],
-        )
-
-    else:
-        raise Exception("Method must be either cross_corr or cond_av")
-
+    match method:
+        case "cross_corr_interpolate":
+            (delta_t, c), events = (
+                tde.estimate_time_delay_ccmax_interpolate(x=x, y=y, dt=dt),
+                0,
+            )
+        case "cross_corr":
+            (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
+        case "cond_av":
+            delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
+                x=x,
+                x_t=x_t,
+                y=y,
+                min_threshold=kwargs["min_threshold"],
+                max_threshold=kwargs["max_threshold"],
+                delta=kwargs["delta"],
+                window=kwargs["window"],
+            )
+        case _:
+            raise Exception("Method must be either cross_corr or cond_av")
     return delta_t, c, events
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, naive: bool, method: str, **kwargs: dict):
+def _estimate_velocities_given_points(
+    p0, p1, p2, ds, naive: bool, method: str, **kwargs: dict
+):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
@@ -267,9 +269,17 @@ def _estimate_velocities_given_points(p0, p1, p2, ds, naive: bool, method: str, 
     events = min(events_x, events_y)
 
     if naive:
-        return *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+        return (
+            *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
     else:
-        return *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0), confidence, events
+        return (
+            *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
 
 
 def _is_within_boundaries(p, ds):
@@ -277,7 +287,12 @@ def _is_within_boundaries(p, ds):
 
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
+    x,
+    y,
+    ds: xr.Dataset,
+    naive: bool = False,
+    method: str = "cross_corr",
+    **kwargs: dict,
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -285,7 +300,9 @@ def estimate_velocities_for_pixel(
     ignored. Pixels outside the coordinate domain are ignored. Time delay
     estimation is performed by maximizing either the cross- correlation
     function or cross conditional average function, which is specified in input
-    argument 'method'.
+    argument 'method'. Setting 'method'='cross_corr_interpolate' will let
+    interpolate the cross-correlation function to find the maximum so that it
+    is not restricted to a multiple of the discretization time.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -300,8 +317,8 @@ def estimate_velocities_for_pixel(
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
-        naive: [bool] If True, use 1D method to estimate velocities. If False, use 2D method.
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
+            naive: [bool] If True, use 1D method to estimate velocities. If False, use 2D method.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
             - max_threshold: max threshold for conditional averaged events
@@ -341,7 +358,7 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, naive: bool, method: str = "cross_corr", **kwargs: dict
+    ds: xr.Dataset, naive: bool = False, method: str = "cross_corr", **kwargs: dict
 ) -> MovieData:
     """Computes the velocity field of a given dataset ds with GPI data in a
     format produced by https://github.com/sajidah-ahmed/cmod_functions. The
@@ -351,7 +368,9 @@ def estimate_velocity_field(
     neighbour. The velocities are estimated from a time delay estimation
     performed by maximizing either the cross- correlation function or cross
     conditional average function, which is specified in input argument
-    'method'.
+    'method'. Setting 'method'='cross_corr_interpolate' will let interpolate
+    the cross-correlation function to find the maximum so that it is not
+    restricted to a multiple of the discretization time.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -367,7 +386,7 @@ def estimate_velocity_field(
 
     Input:
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
+        method: 'cross_corr' or 'cond_av' or 'cross_corr_interpolate'
         naive: [bool] If True, use 1D method to estimate velocities. If False, use 2D method.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events

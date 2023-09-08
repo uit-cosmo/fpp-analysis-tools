@@ -213,6 +213,57 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     return ccf_times[max_index], ccf[max_index]
 
 
+def estimate_time_delay_ccmax_interpolate(x: np.ndarray, y: np.ndarray, dt: float):
+    """Estimates the average time delay between to signals by finding the time
+    lag that maximizes the interpolated cross-correlation function. By using
+    interpolation, the returned time does not need to be an integer multiple of
+    dt.
+
+    Returns:
+        td Estimated time delay
+        C Cross correlation at a time lag td.
+    """
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+
+    # If the maximum is very close to the origin, we make an interpolation window of 20 discretization times in
+    # each direction, otherwise, the interpolation window is twice the time maximum in each direction.
+    interpolation_window_boundary = (
+        20 * dt if np.abs(max_time) < 10 * dt else np.abs(max_time) * 2
+    )
+    interpolation_window = np.abs(ccf_times) < interpolation_window_boundary
+
+    max_time_interpolate = _find_maximum_interpolate(
+        ccf_times[interpolation_window], ccf[interpolation_window]
+    )
+
+    return max_time_interpolate, ccf_value
+
+
+def _find_maximum_interpolate(x, y):
+    from scipy.interpolate import InterpolatedUnivariateSpline
+
+    # Taking the derivative and finding the roots only work if the spline degree is at least 4.
+    spline = InterpolatedUnivariateSpline(x, y, k=4)
+    possible_maxima = spline.derivative().roots()
+    possible_maxima = np.append(
+        possible_maxima, (x[0], x[-1])
+    )  # also check the endpoints of the interval
+    values = spline(possible_maxima)
+
+    max_index = np.argmax(values)
+    if possible_maxima[max_index] == x[0] or possible_maxima[max_index] == x[-1]:
+        import warnings
+
+        warnings.warn(
+            "Maximization on interpolation yielded a maximum in the boundary!"
+        )
+    return possible_maxima[max_index]
+
+
 def estimate_time_delay_ccond_av_max(
     x: np.ndarray,
     x_t: np.ndarray,
