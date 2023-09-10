@@ -148,4 +148,4 @@ def window_radius(cut_off_freq, time):
     t_run_mean = 1 / cut_off_freq
     samples = ((t_run_mean / dt) - 1) / 2
 
-    return int(samples)
+    return round(samples)
