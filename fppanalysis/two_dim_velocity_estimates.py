@@ -282,8 +282,6 @@ def _estimate_velocities_given_points(
             confidence,
             events,
         )
-    elif use_2d_estimation == False and (delta_tx == 0 or delta_ty == 0):
-        return np.nan
     else:
         return (
             *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
