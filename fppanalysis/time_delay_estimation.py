@@ -198,26 +198,12 @@ def estimate_delays(
     return avg, minimization.x
 
 
-def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
+def estimate_time_delay_ccmax(
+    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+):
     """Estimates the average time delay between to signals by finding the time
-    lag that maximizes the cross-correlation function.
-
-    Returns:
-        td Estimated time delay
-        C Cross correlation at a time lag td.
-    """
-    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
-    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
-    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
-    max_index = np.argmax(ccf)
-    return ccf_times[max_index], ccf[max_index]
-
-
-def estimate_time_delay_ccmax_interpolate(x: np.ndarray, y: np.ndarray, dt: float):
-    """Estimates the average time delay between to signals by finding the time
-    lag that maximizes the interpolated cross-correlation function. By using
-    interpolation, the returned time does not need to be an integer multiple of
-    dt.
+    lag that maximizes the cross-correlation function. If interpolate is True
+    the maximizing lag is found by interpolation.
 
     Returns:
         td Estimated time delay
@@ -228,6 +214,8 @@ def estimate_time_delay_ccmax_interpolate(x: np.ndarray, y: np.ndarray, dt: floa
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
     max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+    if not interpolate:
+        return max_time, ccf_value
 
     # If the maximum is very close to the origin, we make an interpolation window of 20 discretization times in
     # each direction, otherwise, the interpolation window is twice the time maximum in each direction.
@@ -272,6 +260,7 @@ def estimate_time_delay_ccond_av_max(
     max_threshold: float = None,
     delta: float = None,
     window: bool = False,
+    interpolate: bool = False,
 ):
     """Estimates the average time delay by finding the time lag that maximizes
     the cross conditional average of signal x when signal y is larger than
@@ -286,6 +275,7 @@ def estimate_time_delay_ccond_av_max(
         max_threshold: max threshold for conditional averaged events
         delta: If window = True, delta is the minimal distance between two peaks.
         window: [bool] If True, delta also gives the minimal distance between peaks.
+        interpolate: If True, interpolation is performed to find the maximum.
 
     Returns:
         float: Estimated time delay
@@ -303,8 +293,11 @@ def estimate_time_delay_ccond_av_max(
         print_verbose=False,
     )
     max_index = np.argmax(s_av)
+    return_time = (
+        _find_maximum_interpolate(t_av, s_av) if interpolate else t_av[max_index]
+    )
 
-    return t_av[max_index], s_var[max_index], len(peaks)
+    return return_time, s_var[max_index], len(peaks)
 
 
 def get_avg_velocity_from_time_delays(
