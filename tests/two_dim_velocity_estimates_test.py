@@ -113,6 +113,35 @@ def test_cond_av():
     assert error < 0.1, "Numerical error too big"
 
 
+def test_cond_av_interpolate():
+    v, w = 1.2, 1
+    ds = make_2d_realization(
+        v, w, np.array([5, 5.1]), np.array([5, 5.1]), dt=0.1, K=1000, T=10000
+    )
+    method = "cond_av"
+    min_threshold = 2.5
+    max_threshold = np.inf
+    delta = 5
+    window = True
+    pd = td.estimate_velocities_for_pixel(
+        1,
+        1,
+        ds,
+        method=method,
+        min_threshold=min_threshold,
+        max_threshold=max_threshold,
+        delta=delta,
+        window=window,
+        interpolate=True,
+    )
+    v_est, w_est, = (
+        pd.vx,
+        pd.vy,
+    )
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
+
+
 # Dead pixels have already been preprocessed and have an array of nans at their site
 class MockXDS(xr.Dataset):
     def __init__(self, ds):
@@ -137,6 +166,35 @@ def test_ignore_dead_pixels():
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
     pd = td.estimate_velocities_for_pixel(1, 1, mock_ds)
+    v_est, w_est, = (
+        pd.vx,
+        pd.vy,
+    )
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
+
+
+def test_interpolate():
+    v, w = 1.2, 1
+    # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
+    ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1)
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, ds, method="cross_corr", interpolate=True
+    )
+    v_est, w_est, = (
+        pd.vx,
+        pd.vy,
+    )
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
+
+
+def test_neighbours():
+    v, w = 1.05, 1.05
+    ds = make_2d_realization(
+        v, w, np.array([5, 5.1, 5.2]), np.array([5, 5.1, 5.2]), dt=0.1
+    )
+    pd = td.estimate_velocities_for_pixel(0, 0, ds, neighbors_ccf_min_lag=1)
     v_est, w_est, = (
         pd.vx,
         pd.vy,

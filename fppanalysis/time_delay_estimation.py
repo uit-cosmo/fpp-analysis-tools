@@ -198,9 +198,12 @@ def estimate_delays(
     return avg, minimization.x
 
 
-def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
+def estimate_time_delay_ccmax(
+    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+):
     """Estimates the average time delay between to signals by finding the time
-    lag that maximizes the cross-correlation function.
+    lag that maximizes the cross-correlation function. If interpolate is True
+    the maximizing lag is found by interpolation.
 
     Returns:
         td Estimated time delay
@@ -210,7 +213,43 @@ def estimate_time_delay_ccmax(x: np.ndarray, y: np.ndarray, dt: float):
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
-    return ccf_times[max_index], ccf[max_index]
+    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+    if not interpolate:
+        return max_time, ccf_value
+
+    # If the maximum is very close to the origin, we make an interpolation window of 20 discretization times in
+    # each direction, otherwise, the interpolation window is twice the time maximum in each direction.
+    interpolation_window_boundary = (
+        20 * dt if np.abs(max_time) < 10 * dt else np.abs(max_time) * 2
+    )
+    interpolation_window = np.abs(ccf_times) < interpolation_window_boundary
+
+    max_time_interpolate = _find_maximum_interpolate(
+        ccf_times[interpolation_window], ccf[interpolation_window]
+    )
+
+    return max_time_interpolate, ccf_value
+
+
+def _find_maximum_interpolate(x, y):
+    from scipy.interpolate import InterpolatedUnivariateSpline
+
+    # Taking the derivative and finding the roots only work if the spline degree is at least 4.
+    spline = InterpolatedUnivariateSpline(x, y, k=4)
+    possible_maxima = spline.derivative().roots()
+    possible_maxima = np.append(
+        possible_maxima, (x[0], x[-1])
+    )  # also check the endpoints of the interval
+    values = spline(possible_maxima)
+
+    max_index = np.argmax(values)
+    if possible_maxima[max_index] == x[0] or possible_maxima[max_index] == x[-1]:
+        import warnings
+
+        warnings.warn(
+            "Maximization on interpolation yielded a maximum in the boundary!"
+        )
+    return possible_maxima[max_index]
 
 
 def estimate_time_delay_ccond_av_max(
@@ -221,6 +260,7 @@ def estimate_time_delay_ccond_av_max(
     max_threshold: float = None,
     delta: float = None,
     window: bool = False,
+    interpolate: bool = False,
 ):
     """Estimates the average time delay by finding the time lag that maximizes
     the cross conditional average of signal x when signal y is larger than
@@ -235,6 +275,7 @@ def estimate_time_delay_ccond_av_max(
         max_threshold: max threshold for conditional averaged events
         delta: If window = True, delta is the minimal distance between two peaks.
         window: [bool] If True, delta also gives the minimal distance between peaks.
+        interpolate: If True, interpolation is performed to find the maximum.
 
     Returns:
         float: Estimated time delay
@@ -252,8 +293,11 @@ def estimate_time_delay_ccond_av_max(
         print_verbose=False,
     )
     max_index = np.argmax(s_av)
+    return_time = (
+        _find_maximum_interpolate(t_av, s_av) if interpolate else t_av[max_index]
+    )
 
-    return t_av[max_index], s_var[max_index], len(peaks)
+    return return_time, s_var[max_index], len(peaks)
 
 
 def get_avg_velocity_from_time_delays(
