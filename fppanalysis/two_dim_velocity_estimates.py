@@ -331,25 +331,28 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
 
 
 def _find_neighbors(x, y, ds: xr.Dataset, neighbors_ccf_min_lag: int):
-    def should_update(p):
+    def should_hopp_pixel(p):
+        # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
+        if neighbors_ccf_min_lag == -1:
+            return False
         return _is_within_boundaries(p, ds) and not _check_ccf_constrains(
             (x, y), p, ds, neighbors_ccf_min_lag
         )
 
     left = -1
-    while should_update((x + left, y)):
+    while should_hopp_pixel((x + left, y)):
         left -= 1
 
     right = 1
-    while should_update((x + right, y)):
+    while should_hopp_pixel((x + right, y)):
         right += 1
 
     up = 1
-    while should_update((x, y + up)):
+    while should_hopp_pixel((x, y + up)):
         up += 1
 
     down = -1
-    while should_update((x, y + down)):
+    while should_hopp_pixel((x, y + down)):
         down -= 1
 
     return [(x + left, y), (x + right, y)], [(x, y + down), (x, y + up)]
@@ -391,7 +394,8 @@ def estimate_velocities_for_pixel(
         neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
         pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition.
+        neighbor pixel is found complient to this condition. If set to -1, no condition will
+        be applied.
         interpolate: If true, the maximizing time lags are found by interpolation.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
@@ -475,7 +479,8 @@ def estimate_velocity_field(
         neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
         pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition.
+        neighbor pixel is found complient to this condition. If set to -1, no condition will
+        be applied.
         interpolate: If True the maximizing time lags are found by interpolation.
         kwargs: kwargs used in 'cond_av'
             - min_threshold: min threshold for conditional averaged events
