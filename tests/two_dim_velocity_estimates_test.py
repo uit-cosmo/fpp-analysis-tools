@@ -57,7 +57,7 @@ def test_rad_and_pol():
 
 def test_full():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7, 8]), np.array([5, 6, 7, 8]))
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
     movie_data = td.estimate_velocity_field(ds)
     vx = movie_data.get_vx()
     assert np.max(np.abs(vx - np.ones(shape=(4, 4)))) < 0.1, "Numerical error too big"

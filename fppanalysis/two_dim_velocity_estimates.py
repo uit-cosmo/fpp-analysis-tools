@@ -29,6 +29,19 @@ class PixelData:
     events: int = 0
 
 
+def set_pixel(item):
+    i, j, ds = item[0], item[1], item[2]
+    try:
+        return estimate_velocities_for_pixel(i, j, ds)
+    except:
+        print(
+            "Issues estimating velocity for pixel",
+            i,
+            j,
+            "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+        )
+    return PixelData()
+
 class MovieData:
     """Class containing estimated data for all pixels in a set. Return object
     from estimate_velocity_field function, the indexing format of MovieData
@@ -48,22 +61,31 @@ class MovieData:
     Dead pixels have empty PixelData (null vx and vy).
     """
 
-    def __init__(self, range_r, range_z, func):
+    def __init__(self, range_r, range_z, func, ds):
         self.r_dim = len(range_r)
         self.z_dim = len(range_z)
         self.pixels = [[PixelData() for i in range_z] for j in range_r]
+        items = [(i, j, ds) for i in range_r for j in range_z]
 
+        from multiprocessing import Pool
+        def set_pixel(i, j):
+            try:
+                return estimate_velocities_for_pixel(i, j, ds)
+            except:
+                print(
+                    "Issues estimating velocity for pixel",
+                    i,
+                    j,
+                    "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+                )
+            return PixelData()
+
+        pool = Pool()
+        results = pool.map(set_pixel, items)
         for i in range_r:
             for j in range_z:
-                try:
-                    self.pixels[i][j] = func(i, j)
-                except:
-                    print(
-                        "Issues estimating velocity for pixel",
-                        i,
-                        j,
-                        "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-                    )
+                self.pixels[i][j] = results[len(range_r) * j + i]
+
 
     def _get_field(self, field_name):
         return np.array(
@@ -509,5 +531,6 @@ def estimate_velocity_field(
             interpolate,
             **kwargs,
         ),
+        ds
     )
     return movie_data
