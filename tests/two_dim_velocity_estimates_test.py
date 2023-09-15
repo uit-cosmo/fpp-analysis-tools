@@ -77,6 +77,16 @@ def test_full():
     assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
 
 
+def test_full_parallel():
+    v, w = 1, 1
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
+    eo = get_estimation_options()
+    eo.num_cores = 8
+    movie_data = td.estimate_velocity_field(ds, eo)
+    vx = movie_data.get_vx()
+    assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
+
+
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
