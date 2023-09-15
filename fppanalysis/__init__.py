@@ -23,4 +23,4 @@ from .two_dim_velocity_estimates import (
     EstimationOptions
 )
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
