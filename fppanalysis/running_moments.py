@@ -150,15 +150,14 @@ def window_radius(cut_off_freq, time):
 
     return int(samples)
 
-def run_norm_ds(ds, radius, **kwargs):
+def run_norm_ds(ds, radius):
     """Returns running normalized dataset of a given dataset using run_norm from
-    fppanalysis function by applying xarray apply_ufunc.
+    fppanalysis function by applying xarray apply_ufunc. Thanks to the
+    Research software engineering (RSE) group at UiT for help with this.
 
     Input:
         - ds: xarray Dataset
         - radius: radius of the window used in run_norm. Window size is 2*radius+1. ... int
-        - kwargs:
-            cut_off_freq: cut off frequency used to determine length of running window in run_norm.
 
     'run_norm' returns a tuple of time base and the signal. Therefore, apply_ufunc will
     return a tuple of two DataArray (corresponding to time base and the signal).
