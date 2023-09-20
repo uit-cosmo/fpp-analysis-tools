@@ -5,6 +5,7 @@ from fppanalysis.conditional_averaging import cond_av
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
+from dataclasses import dataclass
 
 
 def get_average(params: np.ndarray, distribution: rv_continuous):
@@ -196,6 +197,67 @@ def estimate_delays(
             )
 
     return avg, minimization.x
+
+
+@dataclass
+class CcfFitEstimationOptions:
+    def __init__(self, fit_window=100, initial_guess=np.array([1, 0, 1])):
+        """
+        fit_window: int The window employed for the fit will be centered at 0 with length 2 * fit_window + 1.
+        """
+        self.fit_window = fit_window
+        self.initial_guess = initial_guess
+
+    @staticmethod
+    def get_ccf_analytical(times, params):
+        c, t0, taud = params[0], params[1], params[2]
+        return c * np.exp(-np.abs(times - t0) / taud)
+
+
+def estimate_time_delay_ccf_fit(
+    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions
+):
+    """Estimates the average time delay between to signals by fitting the
+    cross-correlation function to an analytical expression.
+
+    Returns:
+        td Estimated time delay
+        C Cross correlation at a time lag td.
+    """
+    from scipy.optimize import minimize
+
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+
+    fit_window = np.abs(ccf_times) < estimation_options.fit_window * dt
+
+    minimization = minimize(lambda params: np.sum((estimation_options.get_ccf_analytical(ccf_times[fit_window], params) - ccf[fit_window]) ** 2), estimation_options.initial_guess, method='Nelder-Mead',
+                            options={'maxiter': 1000})
+
+    c, t0, taud = minimization.x[0], minimization.x[1], minimization.x[2]
+
+    return t0, ccf_value
+
+
+def get_ccf_fit_data(x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions):
+    """Used for debugging estimate_time_delay_ccf_fit. 
+
+    Returns:
+        td Estimated time delay
+        C Cross correlation at a time lag td.
+    """
+    from scipy.optimize import minimize
+
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    fit_window = np.abs(ccf_times) < estimation_options.fit_window * dt
+
+    minimization = minimize(lambda params: np.sum((estimation_options.get_ccf_analytical(ccf_times[fit_window], params) - ccf[fit_window]) ** 2), estimation_options.initial_guess, method='Nelder-Mead',
+                            options={'maxiter': 1000})
+
+    return ccf_times[fit_window], ccf[fit_window], estimation_options.get_ccf_analytical(ccf_times[fit_window], minimization.x)
 
 
 def estimate_time_delay_ccmax(

@@ -182,7 +182,9 @@ def test_interpolate():
     v, w = 1.2, 1
     # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
     ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1)
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
+    eo = get_estimation_options()
+    eo.method = "cross_corr"
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -199,6 +201,20 @@ def test_neighbours():
     estimation_options = get_estimation_options()
     estimation_options.neighbors_ccf_min_lag = 1
     pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
+    v_est, w_est, = (
+        pd.vx,
+        pd.vy,
+    )
+    error = np.max([abs(v_est - v), abs(w_est - w)])
+    assert error < 0.1, "Numerical error too big"
+
+
+def test_cross_corr_fit():
+    v, w = 1, 1
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    eo = get_estimation_options()
+    eo.method = "cross_corr_fit"
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
     v_est, w_est, = (
         pd.vx,
         pd.vy,

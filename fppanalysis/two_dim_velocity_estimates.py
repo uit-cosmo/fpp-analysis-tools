@@ -18,6 +18,7 @@ class EstimationOptions:
         max_threshold: float = np.inf,
         delta: float = None,
         window: bool = False,
+        ccf_fit_eo: tde.CcfFitEstimationOptions = tde.CcfFitEstimationOptions()
     ):
         """
         Estimation options for velocity estimation method.
@@ -35,6 +36,7 @@ class EstimationOptions:
         - max_threshold: Used only if method = "cond_av". max threshold for conditional averaged events
         - delta: Used only if method = "cond_av". If window = True, delta is the minimal distance between two peaks.
         - window: Used only if method = "cond_av". [bool] If True, delta also gives the minimal distance between peaks.
+        - ccf_fit_eo: Time delay estimation options to be used if method = "cross_corr_fit"
         """
         self.method = method
         self.use_2d_estimation = use_2d_estimation
@@ -45,6 +47,7 @@ class EstimationOptions:
         self.max_threshold = max_threshold
         self.delta = delta
         self.window = window
+        self.ccf_fit_eo = ccf_fit_eo
 
 
 @dataclass
@@ -273,6 +276,13 @@ def _estimate_time_delay(
                 delta=estimation_options.delta,
                 window=estimation_options.window,
                 interpolate=estimation_options.interpolate,
+            )
+        case "cross_corr_fit":
+            (delta_t, c), events = (
+                tde.estimate_time_delay_ccf_fit(
+                    x=x, y=y, dt=dt, estimation_options=estimation_options.ccf_fit_eo
+                ),
+                0,
             )
         case _:
             raise Exception("Method must be either cross_corr or cond_av")
