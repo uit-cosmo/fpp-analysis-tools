@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fppanalysis"
-version = "0.1.4"
+version = "0.1.5"
 description = "Analysis tools for time series"
 homepage = "https://github.com/uit-cosmo/fpp-analysis-tools"
 authors = ["gregordecristoforo <gregor.decristoforo@gmail.com>"]
@@ -17,6 +17,7 @@ matplotlib = "^3.6.3"
 mpmath = "^1.2.1"
 blobmodel = "^0.1.1"
 xarray = "^0.21.1"
+pathos = "^0.3.1"
 
 [build-system]
 requires = ["poetry-core"]

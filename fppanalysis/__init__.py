@@ -19,7 +19,8 @@ from .time_delay_estimation import (
 from .two_dim_velocity_estimates import (
     get_2d_velocities_from_time_delays,
     estimate_velocities_for_pixel,
-    estimate_velocity_field
+    estimate_velocity_field,
+    EstimationOptions
 )
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

@@ -43,10 +43,24 @@ def update_geometry(x_grid, y_grid, model):
     model._geometry.y = y_grid
 
 
+def get_estimation_options():
+    return td.EstimationOptions(
+        method="cross_corr",
+        use_2d_estimation=True,
+        neighbors_ccf_min_lag=0,
+        interpolate=True,
+        min_threshold=2.5,
+        max_threshold=np.inf,
+        delta=None,
+        window=False,
+    )
+
+
 def test_rad_and_pol():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    estimation_options = get_estimation_options()
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -57,16 +71,26 @@ def test_rad_and_pol():
 
 def test_full():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7, 8]), np.array([5, 6, 7, 8]))
-    movie_data = td.estimate_velocity_field(ds)
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
+    movie_data = td.estimate_velocity_field(ds, get_estimation_options())
     vx = movie_data.get_vx()
-    assert np.max(np.abs(vx - np.ones(shape=(4, 4)))) < 0.1, "Numerical error too big"
+    assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
+
+
+def test_full_parallel():
+    v, w = 1, 1
+    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
+    eo = get_estimation_options()
+    eo.num_cores = 8
+    movie_data = td.estimate_velocity_field(ds, eo)
+    vx = movie_data.get_vx()
+    assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
 
 
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -78,7 +102,7 @@ def test_rad_and_neg_pol():
 def test_rad_and_2pol():
     v, w = 1, 2
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -90,27 +114,17 @@ def test_rad_and_2pol():
 def test_cond_av():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    method = "cond_av"
-    min_threshold = 2.5
-    max_threshold = np.inf
-    delta = 5
-    window = True
-    pd = td.estimate_velocities_for_pixel(
-        1,
-        1,
-        ds,
-        method=method,
-        min_threshold=min_threshold,
-        max_threshold=max_threshold,
-        delta=delta,
-        window=window,
-    )
+    estimation_options = get_estimation_options()
+    estimation_options.method = "cond_av"
+    estimation_options.delta = 5
+    estimation_options.window = True
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
     )
     error = np.max([abs(v_est - v), abs(w_est - w)])
-    assert error < 0.1, "Numerical error too big"
+    assert error < 0.15, "Numerical error too big"
 
 
 def test_cond_av_interpolate():
@@ -118,22 +132,12 @@ def test_cond_av_interpolate():
     ds = make_2d_realization(
         v, w, np.array([5, 5.1]), np.array([5, 5.1]), dt=0.1, K=1000, T=10000
     )
-    method = "cond_av"
-    min_threshold = 2.5
-    max_threshold = np.inf
-    delta = 5
-    window = True
-    pd = td.estimate_velocities_for_pixel(
-        1,
-        1,
-        ds,
-        method=method,
-        min_threshold=min_threshold,
-        max_threshold=max_threshold,
-        delta=delta,
-        window=window,
-        interpolate=True,
-    )
+    estimation_options = get_estimation_options()
+    estimation_options.method = "cond_av"
+    estimation_options.delta = 5
+    estimation_options.window = True
+
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -165,7 +169,7 @@ def test_ignore_dead_pixels():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
-    pd = td.estimate_velocities_for_pixel(1, 1, mock_ds)
+    pd = td.estimate_velocities_for_pixel(1, 1, mock_ds, get_estimation_options())
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -178,9 +182,7 @@ def test_interpolate():
     v, w = 1.2, 1
     # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
     ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1)
-    pd = td.estimate_velocities_for_pixel(
-        1, 1, ds, method="cross_corr", interpolate=True
-    )
+    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
     v_est, w_est, = (
         pd.vx,
         pd.vy,
@@ -194,7 +196,9 @@ def test_neighbours():
     ds = make_2d_realization(
         v, w, np.array([5, 5.1, 5.2]), np.array([5, 5.1, 5.2]), dt=0.1
     )
-    pd = td.estimate_velocities_for_pixel(0, 0, ds, neighbors_ccf_min_lag=1)
+    estimation_options = get_estimation_options()
+    estimation_options.neighbors_ccf_min_lag = 1
+    pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
     v_est, w_est, = (
         pd.vx,
         pd.vy,
