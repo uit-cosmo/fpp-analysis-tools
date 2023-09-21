@@ -6,6 +6,7 @@ import xarray as xr
 from dataclasses import dataclass
 
 
+@dataclass
 class EstimationOptions:
     def __init__(
         self,
@@ -25,7 +26,7 @@ class EstimationOptions:
         - method: 'cross_corr' or 'cond_av'
         - use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
         - neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
-        pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
+        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
         neighbor pixel is found complient to this condition. If set to -1, no condition will
         be applied.
@@ -89,19 +90,6 @@ class MovieData:
     Dead pixels have empty PixelData (null vx and vy).
     """
 
-    def _set_pixel(self, items):
-        i, j = items[0], items[1]
-        try:
-            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options)
-        except:
-            print(
-                "Issues estimating velocity for pixel",
-                i,
-                j,
-                "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-            )
-        return PixelData()
-
     def __init__(self, ds, estimation_options: EstimationOptions):
         range_r, range_z = range(0, len(ds.x.values)), range(0, len(ds.y.values))
         self.r_dim = len(range_r)
@@ -117,6 +105,19 @@ class MovieData:
         for i in range_r:
             for j in range_z:
                 self.pixels[i][j] = results[len(range_r) * j + i]
+
+    def _set_pixel(self, items):
+        i, j = items[0], items[1]
+        try:
+            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options)
+        except:
+            print(
+                "Issues estimating velocity for pixel",
+                i,
+                j,
+                "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+            )
+        return PixelData()
 
     def _get_field(self, field_name):
         return np.array(
