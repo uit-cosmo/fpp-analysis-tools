@@ -72,7 +72,10 @@ def test_rad_and_pol():
 def test_full():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
-    movie_data = td.estimate_velocity_field(ds, get_estimation_options())
+    eo = get_estimation_options()
+    eo.num_cores=4
+    eo.method = "cross_corr_running_mean"
+    movie_data = td.estimate_velocity_field(ds, eo)
     vx = movie_data.get_vx()
     assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
 
@@ -183,7 +186,7 @@ def test_interpolate():
     # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
     ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1)
     eo = get_estimation_options()
-    eo.method = "cross_corr"
+    eo.method = "cross_corr_running_mean"
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
     v_est, w_est, = (
         pd.vx,

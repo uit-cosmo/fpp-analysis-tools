@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
@@ -291,6 +293,70 @@ def estimate_time_delay_ccmax(
     )
 
     return max_time_interpolate, ccf_value
+
+
+def estimate_time_delay_ccmax_running_mean(
+    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+):
+    """Estimates the average time delay between to signals by finding the time
+    lag that maximizes the cross-correlation function. If the number of local maxima
+    in the provided window is larger than 1, a running mean is applied on the estimated
+    cross-correlation function with a running mean window of a size that will be
+    increased gradually til the resulting cross-correlation function only has
+    1 local maxima.
+    If interpolate is True the maximizing lag is found by interpolation.
+
+    Returns:
+        td Estimated time delay
+        C Cross correlation at a time lag td.
+    """
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+
+    find_window = np.abs(ccf_times - ccf_times[max_index]) < 50 * dt
+    ccf_times = ccf_times[find_window]
+    ccf = ccf[find_window]
+
+    ccf, n = _run_mean_and_locate_maxima(ccf)
+    if ccf is None:
+        return None, None
+    if n > 1:
+        ccf_times = ccf_times[int(n/2):-int(n/2)]
+
+    # Maximum might have changed after running mean
+    max_index = np.argmax(ccf)
+    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+
+    if not interpolate:
+        return max_time, ccf_value
+
+    interpolation_window = np.abs(ccf_times - max_time) < 20 * dt
+
+    max_time_interpolate = _find_maximum_interpolate(
+        ccf_times[interpolation_window], ccf[interpolation_window]
+    )
+
+    return max_time_interpolate, ccf_value
+
+
+def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
+    ccf_mean = ccf
+    n = 1
+    while _count_local_maxima(ccf_mean) > 1:
+        n = n + 2
+        if n > max_run_window_size:
+            warnings.warn("Maximum running window achieved")
+            return None, n
+        ccf_mean = np.convolve(ccf, np.ones(n)/n, mode='valid')
+    return ccf_mean, n
+
+
+def _count_local_maxima(ccf):
+    local_maxima = np.array([False] * len(ccf))
+    local_maxima[1:-1] = np.logical_and(ccf[1:-1] > ccf[2:], ccf[1:-1] > ccf[:-2])
+    return len(np.where(local_maxima)[0])
 
 
 def _find_maximum_interpolate(x, y):

@@ -284,6 +284,13 @@ def _estimate_time_delay(
                 ),
                 0,
             )
+        case "cross_corr_running_mean":
+            (delta_t, c), events = (
+                tde.estimate_time_delay_ccmax_running_mean(
+                    x=x, y=y, dt=dt, interpolate=estimation_options.interpolate
+                ),
+                0,
+            )
         case _:
             raise Exception("Method must be either cross_corr or cond_av")
     return delta_t, c, events
