@@ -18,6 +18,7 @@ class EstimationOptions:
         max_threshold: float = np.inf,
         delta: float = None,
         window: bool = False,
+        verbose: bool = False,
         ccf_fit_eo: tde.CcfFitEstimationOptions = tde.CcfFitEstimationOptions()
     ):
         """
@@ -47,6 +48,7 @@ class EstimationOptions:
         self.max_threshold = max_threshold
         self.delta = delta
         self.window = window
+        self.verbose = verbose
         self.ccf_fit_eo = ccf_fit_eo
 
 
@@ -323,6 +325,10 @@ def _estimate_velocities_given_points(
     delta_tx, cx, events_x = _estimate_time_delay(
         x=signal1, x_t=time1, y=signal0, dt=dt, estimation_options=estimation_options
     )
+
+    # If for some reason the time delay cannot be estimated, we return None
+    if delta_tx is None or delta_ty is None:
+        return None
 
     confidence = min(cx, cy)
     events = min(events_x, events_y)

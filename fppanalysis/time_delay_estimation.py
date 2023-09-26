@@ -372,8 +372,6 @@ def _find_maximum_interpolate(x, y):
 
     max_index = np.argmax(values)
     if possible_maxima[max_index] == x[0] or possible_maxima[max_index] == x[-1]:
-        import warnings
-
         warnings.warn(
             "Maximization on interpolation yielded a maximum in the boundary!"
         )
