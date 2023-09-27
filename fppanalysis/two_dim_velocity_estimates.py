@@ -19,7 +19,7 @@ class EstimationOptions:
         delta: float = None,
         window: bool = False,
         verbose: bool = False,
-        ccf_fit_eo: tde.CcfFitEstimationOptions = tde.CcfFitEstimationOptions()
+        ccf_fit_eo: tde.CcfFitEstimationOptions = tde.CcfFitEstimationOptions(),
     ):
         """
         Estimation options for velocity estimation method.
@@ -113,15 +113,22 @@ class MovieData:
         self.z_dim = len(range_z)
         self.ds = ds
         self.estimation_options = estimation_options
-        self.pixels = [[PixelData() for _ in range_z] for _ in range_r]
+        self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
         from pathos.multiprocessing import ProcessPool
 
-        pool = ProcessPool(estimation_options.num_cores)
-        results = pool.map(self._set_pixel, [(i, j) for i in range_r for j in range_z])
-        for i in range_r:
-            for j in range_z:
-                self.pixels[i][j] = results[len(range_r) * j + i]
+        if estimation_options.num_cores > 1:
+            pool = ProcessPool(estimation_options.num_cores)
+            results = pool.map(
+                self._set_pixel, [(j, i) for i in range_z for j in range_r]
+            )
+            for i in range_z:
+                for j in range_r:
+                    self.pixels[i][j] = results[len(range_r) * i + j]
+        else:
+            for i in range_z:
+                for j in range_r:
+                    self.pixels[i][j] = self._set_pixel((j, i))
 
     def _get_field(self, field_name):
         return np.array(

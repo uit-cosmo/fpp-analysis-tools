@@ -73,21 +73,20 @@ def test_full():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
     eo = get_estimation_options()
-    eo.num_cores=4
-    eo.method = "cross_corr_running_mean"
+    eo.method = "cross_corr"
     movie_data = td.estimate_velocity_field(ds, eo)
     vx = movie_data.get_vx()
-    assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
+    assert np.max(np.abs(vx - np.ones(shape=(4, 3)))) < 0.1, "Numerical error too big"
 
 
 def test_full_parallel():
     v, w = 1, 1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
     eo = get_estimation_options()
-    eo.num_cores = 8
+    eo.num_cores = 4
     movie_data = td.estimate_velocity_field(ds, eo)
     vx = movie_data.get_vx()
-    assert np.max(np.abs(vx - np.ones(shape=(3, 4)))) < 0.1, "Numerical error too big"
+    assert np.max(np.abs(vx - np.ones(shape=(4, 3)))) < 0.1, "Numerical error too big"
 
 
 def test_rad_and_neg_pol():
@@ -184,7 +183,7 @@ def test_ignore_dead_pixels():
 def test_interpolate():
     v, w = 1.2, 1
     # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
-    ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1)
+    ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1, K=5000, T=5000)
     eo = get_estimation_options()
     eo.method = "cross_corr_running_mean"
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
