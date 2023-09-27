@@ -236,16 +236,28 @@ def estimate_time_delay_ccf_fit(
 
     fit_window = np.abs(ccf_times) < estimation_options.fit_window * dt
 
-    minimization = minimize(lambda params: np.sum((estimation_options.get_ccf_analytical(ccf_times[fit_window], params) - ccf[fit_window]) ** 2), estimation_options.initial_guess, method='Nelder-Mead',
-                            options={'maxiter': 1000})
+    minimization = minimize(
+        lambda params: np.sum(
+            (
+                estimation_options.get_ccf_analytical(ccf_times[fit_window], params)
+                - ccf[fit_window]
+            )
+            ** 2
+        ),
+        estimation_options.initial_guess,
+        method="Nelder-Mead",
+        options={"maxiter": 1000},
+    )
 
     c, t0, taud = minimization.x[0], minimization.x[1], minimization.x[2]
 
     return t0, ccf_value
 
 
-def get_ccf_fit_data(x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions):
-    """Used for debugging estimate_time_delay_ccf_fit. 
+def get_ccf_fit_data(
+    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions
+):
+    """Used for debugging estimate_time_delay_ccf_fit.
 
     Returns:
         td Estimated time delay
@@ -256,10 +268,24 @@ def get_ccf_fit_data(x: np.ndarray, y: np.ndarray, dt: float, estimation_options
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
     fit_window = np.abs(ccf_times) < estimation_options.fit_window * dt
 
-    minimization = minimize(lambda params: np.sum((estimation_options.get_ccf_analytical(ccf_times[fit_window], params) - ccf[fit_window]) ** 2), estimation_options.initial_guess, method='Nelder-Mead',
-                            options={'maxiter': 1000})
+    minimization = minimize(
+        lambda params: np.sum(
+            (
+                estimation_options.get_ccf_analytical(ccf_times[fit_window], params)
+                - ccf[fit_window]
+            )
+            ** 2
+        ),
+        estimation_options.initial_guess,
+        method="Nelder-Mead",
+        options={"maxiter": 1000},
+    )
 
-    return ccf_times[fit_window], ccf[fit_window], estimation_options.get_ccf_analytical(ccf_times[fit_window], minimization.x)
+    return (
+        ccf_times[fit_window],
+        ccf[fit_window],
+        estimation_options.get_ccf_analytical(ccf_times[fit_window], minimization.x),
+    )
 
 
 def estimate_time_delay_ccmax(
@@ -298,17 +324,18 @@ def estimate_time_delay_ccmax(
 def estimate_time_delay_ccmax_running_mean(
     x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
 ):
-    """Estimates the average time delay between to signals by finding the time
+    """
+    Estimates the average time delay between to signals by finding the time
     lag that maximizes the cross-correlation function. If the number of local maxima
     in the provided window is larger than 1, a running mean is applied on the estimated
     cross-correlation function with a running mean window of a size that will be
     increased gradually til the resulting cross-correlation function only has
     1 local maxima.
     If interpolate is True the maximizing lag is found by interpolation.
-
     Returns:
         td Estimated time delay
-        C Cross correlation at a time lag td.
+        ccf Cross-correlation value at the estimated time delay
+
     """
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
@@ -323,7 +350,7 @@ def estimate_time_delay_ccmax_running_mean(
     if ccf is None:
         return None, None
     if n > 1:
-        ccf_times = ccf_times[int(n/2):-int(n/2)]
+        ccf_times = ccf_times[int(n / 2) : -int(n / 2)]
 
     # Maximum might have changed after running mean
     max_index = np.argmax(ccf)
@@ -341,6 +368,52 @@ def estimate_time_delay_ccmax_running_mean(
     return max_time_interpolate, ccf_value
 
 
+def get_time_delay_ccmax_rm_data(
+    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+):
+    """
+    Returns all data relevant for the method estimate_time_delay_ccmax_running_mean.
+
+    Returns:
+        ccf_times Times for ccf array without running mean
+        ccf cross correlation function array without running mean
+        ccf_times_rm Times for ccf array with running mean
+        ccf_rm ccf array with running mean
+        td Estimated time delay
+        max_ccf_value Max cross-correlation value
+    """
+    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+
+    find_window = np.abs(ccf_times - ccf_times[max_index]) < 50 * dt
+    ccf_times = ccf_times[find_window]
+    ccf = ccf[find_window]
+
+    ccf_rm, n = _run_mean_and_locate_maxima(ccf)
+    ccf_times_rm = ccf_times
+    if ccf_rm is None:
+        return None
+    if n > 1:
+        ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
+
+    # Maximum might have changed after running mean
+    max_index = np.argmax(ccf_rm)
+    max_time, max_ccf_value = ccf_times_rm[max_index], ccf_rm[max_index]
+
+    if not interpolate:
+        return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time, max_ccf_value
+
+    interpolation_window = np.abs(ccf_times_rm - max_time) < 20 * dt
+
+    max_time_interpolate = _find_maximum_interpolate(
+        ccf_times_rm[interpolation_window], ccf_rm[interpolation_window]
+    )
+
+    return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time_interpolate, max_ccf_value
+
+
 def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
     ccf_mean = ccf
     n = 1
@@ -349,7 +422,7 @@ def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
         if n > max_run_window_size:
             warnings.warn("Maximum running window achieved")
             return None, n
-        ccf_mean = np.convolve(ccf, np.ones(n)/n, mode='valid')
+        ccf_mean = np.convolve(ccf, np.ones(n) / n, mode="valid")
     return ccf_mean, n
 
 
