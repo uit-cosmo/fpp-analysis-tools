@@ -1,5 +1,7 @@
 import numpy as np
 from blobmodel import Model, DefaultBlobFactory
+
+import fppanalysis.time_delay_estimation
 import fppanalysis.two_dim_velocity_estimates as td
 import xarray as xr
 
@@ -49,10 +51,6 @@ def get_estimation_options():
         use_2d_estimation=True,
         neighbors_ccf_min_lag=0,
         interpolate=True,
-        min_threshold=2.5,
-        max_threshold=np.inf,
-        delta=None,
-        window=False,
     )
 
 
@@ -117,9 +115,9 @@ def test_cond_av():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
+    cond_av_eo = fppanalysis.time_delay_estimation.ConditionalAvgEstimationOptions(delta=5, window=True)
     estimation_options.method = "cond_av"
-    estimation_options.delta = 5
-    estimation_options.window = True
+    estimation_options.cond_av_eo = cond_av_eo
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     v_est, w_est, = (
         pd.vx,
@@ -135,9 +133,9 @@ def test_cond_av_interpolate():
         v, w, np.array([5, 5.1]), np.array([5, 5.1]), dt=0.1, K=1000, T=10000
     )
     estimation_options = get_estimation_options()
+    cond_av_eo = fppanalysis.time_delay_estimation.ConditionalAvgEstimationOptions(delta=5, window=True)
     estimation_options.method = "cond_av"
-    estimation_options.delta = 5
-    estimation_options.window = True
+    estimation_options.cond_av_eo = cond_av_eo
 
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     v_est, w_est, = (
@@ -183,7 +181,7 @@ def test_ignore_dead_pixels():
 def test_interpolate():
     v, w = 1.2, 1
     # Without interpolation, there is no enough time resolution (dt = 0.1) to find the cross-correlation maximum
-    ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.1, K=5000, T=5000)
+    ds = make_2d_realization(v, w, np.array([1, 1.1]), np.array([5, 5.1]), dt=0.05, K=5000, T=5000)
     eo = get_estimation_options()
     eo.method = "cross_corr_running_mean"
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)

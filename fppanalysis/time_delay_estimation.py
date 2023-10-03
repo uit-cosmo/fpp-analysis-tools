@@ -216,6 +216,30 @@ class CcfFitEstimationOptions:
         return c * np.exp(-np.abs(times - t0) / taud)
 
 
+@dataclass
+class ConditionalAvgEstimationOptions:
+    def __init__(
+        self,
+        min_threshold: float = 2.5,
+        max_threshold: float = np.inf,
+        delta: float = None,
+        window: bool = False,
+        verbose: bool = False,
+    ):
+        """
+        - min_threshold: min threshold for conditional averaged events
+        - max_threshold: max threshold for conditional averaged events
+        - delta: If window = True, delta is the minimal distance between two peaks.
+        - window: [bool] If True, delta also gives the minimal distance between peaks.
+        - verbose: If True prints event info
+        """
+        self.min_threshold = min_threshold
+        self.max_threshold = max_threshold
+        self.delta = delta
+        self.window = window
+        self.verbose = verbose
+
+
 def estimate_time_delay_ccf_fit(
     x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions
 ):
@@ -322,7 +346,11 @@ def estimate_time_delay_ccmax(
 
 
 def estimate_time_delay_ccmax_running_mean(
-    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+    x: np.ndarray,
+    y: np.ndarray,
+    dt: float,
+    interpolate: bool = False,
+    extra_debug_info: str = "",
 ):
     """
     Estimates the average time delay between to signals by finding the time
@@ -348,9 +376,10 @@ def estimate_time_delay_ccmax_running_mean(
 
     ccf, n = _run_mean_and_locate_maxima(ccf)
     if ccf is None:
+        warnings.warn("Maximum running window achieved " + extra_debug_info)
         return None, None
     if n > 1:
-        ccf_times = ccf_times[int(n / 2) : -int(n / 2)]
+        ccf_times = ccf_times[int(n / 2): -int(n / 2)]
 
     # Maximum might have changed after running mean
     max_index = np.argmax(ccf)
@@ -396,7 +425,7 @@ def get_time_delay_ccmax_rm_data(
     if ccf_rm is None:
         return None
     if n > 1:
-        ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
+        ccf_times_rm = ccf_times[int(n / 2): -int(n / 2)]
 
     # Maximum might have changed after running mean
     max_index = np.argmax(ccf_rm)
@@ -420,7 +449,6 @@ def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
     while _count_local_maxima(ccf_mean) > 1:
         n = n + 2
         if n > max_run_window_size:
-            warnings.warn("Maximum running window achieved")
             return None, n
         ccf_mean = np.convolve(ccf, np.ones(n) / n, mode="valid")
     return ccf_mean, n
@@ -455,10 +483,7 @@ def estimate_time_delay_ccond_av_max(
     x: np.ndarray,
     x_t: np.ndarray,
     y: np.ndarray,
-    min_threshold: float = None,
-    max_threshold: float = None,
-    delta: float = None,
-    window: bool = False,
+    cond_av_eo: ConditionalAvgEstimationOptions,
     interpolate: bool = False,
 ):
     """Estimates the average time delay by finding the time lag that maximizes
@@ -484,11 +509,11 @@ def estimate_time_delay_ccond_av_max(
     _, s_av, s_var, t_av, peaks, _ = cond_av(
         x,
         x_t,
-        smin=min_threshold,
-        smax=max_threshold,
+        smin=cond_av_eo.min_threshold,
+        smax=cond_av_eo.max_threshold,
         Sref=y,
-        delta=delta,
-        window=window,
+        delta=cond_av_eo.delta,
+        window=cond_av_eo.window,
         print_verbose=False,
     )
     max_index = np.argmax(s_av)

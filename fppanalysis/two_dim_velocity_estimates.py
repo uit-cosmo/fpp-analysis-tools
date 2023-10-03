@@ -14,11 +14,7 @@ class EstimationOptions:
         neighbors_ccf_min_lag: int = 0,
         interpolate: bool = True,
         num_cores: int = 1,
-        min_threshold: float = 2.5,
-        max_threshold: float = np.inf,
-        delta: float = None,
-        window: bool = False,
-        verbose: bool = False,
+        cond_av_eo: tde.ConditionalAvgEstimationOptions = tde.ConditionalAvgEstimationOptions(),
         ccf_fit_eo: tde.CcfFitEstimationOptions = tde.CcfFitEstimationOptions(),
     ):
         """
@@ -33,10 +29,7 @@ class EstimationOptions:
         be applied.
         - interpolate: If True the maximizing time lags are found by interpolation.
         - num_cores: Number of cores to use.
-        - min_threshold: Used only if method = "cond_av". min threshold for conditional averaged events
-        - max_threshold: Used only if method = "cond_av". max threshold for conditional averaged events
-        - delta: Used only if method = "cond_av". If window = True, delta is the minimal distance between two peaks.
-        - window: Used only if method = "cond_av". [bool] If True, delta also gives the minimal distance between peaks.
+        = cond_av_eo: Conditional average estimation options to be used if method = "cond_av"
         - ccf_fit_eo: Time delay estimation options to be used if method = "cross_corr_fit"
         """
         self.method = method
@@ -44,11 +37,7 @@ class EstimationOptions:
         self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
         self.interpolate = interpolate
         self.num_cores = num_cores
-        self.min_threshold = min_threshold
-        self.max_threshold = max_threshold
-        self.delta = delta
-        self.window = window
-        self.verbose = verbose
+        self.cond_av_eo = cond_av_eo
         self.ccf_fit_eo = ccf_fit_eo
 
 
@@ -261,12 +250,20 @@ def _get_time(x, y, ds):
 
 
 def _estimate_time_delay(
-    x: np.ndarray,
-    x_t: np.ndarray,
-    y: np.ndarray,
-    dt: float,
+    p1,
+    p0,
+    ds,
     estimation_options: EstimationOptions,
 ):
+    extra_debug_info = "Between pixels {} and {}".format(p1, p0)
+
+    x = _get_signal(p1[0], p1[1], ds)
+    y = _get_signal(p0[0], p0[1], ds)
+    dt = _get_dt(ds)
+
+    if len(x) == 0 or len(y) == 0:
+        return None, None, None
+
     match estimation_options.method:
         case "cross_corr":
             (delta_t, c), events = (
@@ -276,14 +273,12 @@ def _estimate_time_delay(
                 0,
             )
         case "cond_av":
+            times = _get_time(p1[0], p1[1], ds)
             delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
                 x=x,
-                x_t=x_t,
+                x_t=times,
                 y=y,
-                min_threshold=estimation_options.min_threshold,
-                max_threshold=estimation_options.max_threshold,
-                delta=estimation_options.delta,
-                window=estimation_options.window,
+                cond_av_eo=estimation_options.cond_av_eo,
                 interpolate=estimation_options.interpolate,
             )
         case "cross_corr_fit":
@@ -296,7 +291,11 @@ def _estimate_time_delay(
         case "cross_corr_running_mean":
             (delta_t, c), events = (
                 tde.estimate_time_delay_ccmax_running_mean(
-                    x=x, y=y, dt=dt, interpolate=estimation_options.interpolate
+                    x=x,
+                    y=y,
+                    dt=dt,
+                    interpolate=estimation_options.interpolate,
+                    extra_debug_info=extra_debug_info,
                 ),
                 0,
             )
@@ -313,24 +312,11 @@ def _estimate_velocities_given_points(
 
     This is specified in method argument.
     """
-    dt = _get_dt(ds)
-    r0, z0 = _get_rz(p0[0], p0[1], ds)
-    r1, z1 = _get_rz(p1[0], p1[1], ds)
-    r2, z2 = _get_rz(p2[0], p2[1], ds)
-    signal0 = _get_signal(p0[0], p0[1], ds)
-    signal1 = _get_signal(p1[0], p1[1], ds)
-    signal2 = _get_signal(p2[0], p2[1], ds)
-    time1 = _get_time(p1[0], p1[1], ds)
-    time2 = _get_time(p2[0], p2[1], ds)
-
-    if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
-        return None
-
     delta_ty, cy, events_y = _estimate_time_delay(
-        x=signal2, x_t=time2, y=signal0, dt=dt, estimation_options=estimation_options
+        p2, p0, ds, estimation_options=estimation_options
     )
     delta_tx, cx, events_x = _estimate_time_delay(
-        x=signal1, x_t=time1, y=signal0, dt=dt, estimation_options=estimation_options
+        p1, p0, ds, estimation_options=estimation_options
     )
 
     # If for some reason the time delay cannot be estimated, we return None
@@ -339,6 +325,10 @@ def _estimate_velocities_given_points(
 
     confidence = min(cx, cy)
     events = min(events_x, events_y)
+
+    r0, z0 = _get_rz(p0[0], p0[1], ds)
+    r1, z1 = _get_rz(p1[0], p1[1], ds)
+    r2, z2 = _get_rz(p2[0], p2[1], ds)
 
     if estimation_options.use_2d_estimation:
         return (
