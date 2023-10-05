@@ -277,20 +277,34 @@ class TDEDelegator:
         self.method = method
         self.options = options
 
-    def estimate_time_delay(self, x: np.ndarray, y: np.ndarray, dt: float):
+    def estimate_time_delay(
+        self, x: np.ndarray, y: np.ndarray, dt: float, extra_debug_info: str = ""
+    ):
         match self.method:
             case TDEMethod.CrossCorrelation:
-                return estimate_time_delay_ccmax(x, y, dt, self.options)
+                return estimate_time_delay_ccmax(
+                    x, y, dt, self.options, extra_debug_info
+                )
             case TDEMethod.ConditionalAveraging:
-                return estimate_time_delay_ccond_av_max(x, y, dt, self.options)
+                return estimate_time_delay_ccond_av_max(
+                    x, y, dt, self.options, extra_debug_info
+                )
             case TDEMethod.CrossCorrelationRM:
-                return estimate_time_delay_ccmax_running_mean(x, y, dt, self.options)
+                return estimate_time_delay_ccmax_running_mean(
+                    x, y, dt, self.options, extra_debug_info
+                )
             case TDEMethod.CCFit:
-                return estimate_time_delay_ccf_fit(x, y, dt, self.options)
+                return estimate_time_delay_ccf_fit(
+                    x, y, dt, self.options, extra_debug_info
+                )
 
 
 def estimate_time_delay_ccf_fit(
-    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CCFitOptions
+    x: np.ndarray,
+    y: np.ndarray,
+    dt: float,
+    estimation_options: CCFitOptions,
+    extra_debug_info: str = "",
 ):
     """Estimates the average time delay between to signals by fitting the
     cross-correlation function to an analytical expression.
@@ -362,7 +376,11 @@ def get_ccf_fit_data(
 
 
 def estimate_time_delay_ccmax(
-    x: np.ndarray, y: np.ndarray, dt: float, options: CCOptions
+    x: np.ndarray,
+    y: np.ndarray,
+    dt: float,
+    options: CCOptions,
+    extra_debug_info: str = "",
 ):
     """Estimates the average time delay between to signals by finding the time
     lag that maximizes the cross-correlation function. If interpolate is True
@@ -388,7 +406,7 @@ def estimate_time_delay_ccmax(
     interpolation_window = np.abs(ccf_times) < interpolation_window_boundary
 
     max_time_interpolate = _find_maximum_interpolate(
-        ccf_times[interpolation_window], ccf[interpolation_window]
+        ccf_times[interpolation_window], ccf[interpolation_window], extra_debug_info
     )
 
     return max_time_interpolate, ccf_value, 0
@@ -440,14 +458,18 @@ def estimate_time_delay_ccmax_running_mean(
     interpolation_window = np.abs(ccf_times - max_time) < 20 * dt
 
     max_time_interpolate = _find_maximum_interpolate(
-        ccf_times[interpolation_window], ccf[interpolation_window]
+        ccf_times[interpolation_window], ccf[interpolation_window], extra_debug_info
     )
 
     return max_time_interpolate, ccf_value, 0
 
 
 def get_time_delay_ccmax_rm_data(
-    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+    x: np.ndarray,
+    y: np.ndarray,
+    dt: float,
+    interpolate: bool = False,
+    extra_debug_info: str = "",
 ):
     """
     Returns all data relevant for the method estimate_time_delay_ccmax_running_mean.
@@ -486,7 +508,9 @@ def get_time_delay_ccmax_rm_data(
     interpolation_window = np.abs(ccf_times_rm - max_time) < 20 * dt
 
     max_time_interpolate = _find_maximum_interpolate(
-        ccf_times_rm[interpolation_window], ccf_rm[interpolation_window]
+        ccf_times_rm[interpolation_window],
+        ccf_rm[interpolation_window],
+        extra_debug_info,
     )
 
     return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time_interpolate, max_ccf_value
@@ -509,7 +533,7 @@ def _count_local_maxima(ccf):
     return len(np.where(local_maxima)[0])
 
 
-def _find_maximum_interpolate(x, y):
+def _find_maximum_interpolate(x, y, extra_debug_info):
     from scipy.interpolate import InterpolatedUnivariateSpline
 
     # Taking the derivative and finding the roots only work if the spline degree is at least 4.
@@ -524,6 +548,7 @@ def _find_maximum_interpolate(x, y):
     if possible_maxima[max_index] == x[0] or possible_maxima[max_index] == x[-1]:
         warnings.warn(
             "Maximization on interpolation yielded a maximum in the boundary!"
+            + extra_debug_info
         )
     return possible_maxima[max_index]
 
@@ -533,6 +558,7 @@ def estimate_time_delay_ccond_av_max(
     y: np.ndarray,
     dt: float,
     cond_av_eo: ConditionalAvgOptions,
+    extra_debug_info: str = "",
 ):
     """Estimates the average time delay by finding the time lag that maximizes
     the cross conditional average of signal x when signal y is larger than
@@ -568,7 +594,7 @@ def estimate_time_delay_ccond_av_max(
     )
     max_index = np.argmax(s_av)
     return_time = (
-        _find_maximum_interpolate(t_av, s_av)
+        _find_maximum_interpolate(t_av, s_av, extra_debug_info)
         if cond_av_eo.interpolate
         else t_av[max_index]
     )

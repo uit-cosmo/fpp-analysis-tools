@@ -234,7 +234,8 @@ def _get_rz_full(ds):
 def _get_signal(x, y, ds):
     # Sajidah's format
     if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
+        # return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
+        return ds.isel(x=x, y=y)["frames"].values
     # 2d code
     if hasattr(ds, "t"):
         return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
@@ -263,17 +264,21 @@ def _get_time(x, y, ds):
     raise "Unknown format"
 
 
+def _is_pixel_dead(x):
+    return np.isnan(x[0])
+
+
 def _estimate_time_delay(p1, p0, ds, tde_delegator: tde.TDEDelegator):
-    # extra_debug_info = "Between pixels {} and {}".format(p1, p0)
+    extra_debug_info = "Between pixels {} and {}".format(p1, p0)
 
     x = _get_signal(p1[0], p1[1], ds)
     y = _get_signal(p0[0], p0[1], ds)
     dt = _get_dt(ds)
 
-    if len(x) == 0 or len(y) == 0:
+    if _is_pixel_dead(x) or _is_pixel_dead(y):
         return None, None, None
 
-    return tde_delegator.estimate_time_delay(x, y, dt)
+    return tde_delegator.estimate_time_delay(x, y, dt, extra_debug_info)
 
 
 def _estimate_velocities_given_points(
@@ -325,13 +330,12 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     signal0 = _get_signal(p0[0], p0[1], ds)
     signal1 = _get_signal(p1[0], p1[1], ds)
 
-    if len(signal1) == 0:
-        warnings.warn(
-            "Pixel {} is dead and cannot be used as a neighbor pixel of {}. Updating.".format(
-                p1, p0
-            )
-        )
+    if _is_pixel_dead(signal1):
         return False
+
+    # No need to compute the ccf if the min lag is 0
+    if neighbors_ccf_min_lag == 0:
+        return True
 
     ccf_times, ccf = cf.corr_fun(
         signal0, signal1, dt=_get_dt(ds), biased=True, norm=True
@@ -418,7 +422,7 @@ def estimate_velocities_for_pixel(
     r_pos, z_pos = _get_rz(x, y, ds)
 
     # If the reference pixel is dead, return empty data right away
-    if len(_get_signal(x, y, ds)) == 0:
+    if _is_pixel_dead(_get_signal(x, y, ds)):
         return PixelData(r_pos=r_pos, z_pos=z_pos)
 
     h_neighbors, v_neighbors = _find_neighbors(
