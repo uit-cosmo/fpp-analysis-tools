@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
 from dataclasses import dataclass
+from enum import Enum
+from abc import ABC
 
 
 def get_average(params: np.ndarray, distribution: rv_continuous):
@@ -201,14 +203,25 @@ def estimate_delays(
     return avg, minimization.x
 
 
+class TDEOptions(ABC):
+    pass
+
+
 @dataclass
-class CcfFitEstimationOptions:
-    def __init__(self, fit_window=100, initial_guess=np.array([1, 0, 1])):
+class CCFitOptions(TDEOptions):
+    def __init__(
+        self,
+        fit_window=100,
+        initial_guess=np.array([1, 0, 1]),
+        interpolate: bool = False,
+    ):
         """
-        fit_window: int The window employed for the fit will be centered at 0 with length 2 * fit_window + 1.
+        - fit_window: int The window employed for the fit will be centered at 0 with length 2 * fit_window + 1.
+        - interpolate: If True the maximizing time lags are found by interpolation.
         """
         self.fit_window = fit_window
         self.initial_guess = initial_guess
+        self.interpolate = interpolate
 
     @staticmethod
     def get_ccf_analytical(times, params):
@@ -217,13 +230,14 @@ class CcfFitEstimationOptions:
 
 
 @dataclass
-class ConditionalAvgEstimationOptions:
+class ConditionalAvgOptions(TDEOptions):
     def __init__(
         self,
         min_threshold: float = 2.5,
         max_threshold: float = np.inf,
         delta: float = None,
         window: bool = False,
+        interpolate: bool = False,
         verbose: bool = False,
     ):
         """
@@ -231,17 +245,52 @@ class ConditionalAvgEstimationOptions:
         - max_threshold: max threshold for conditional averaged events
         - delta: If window = True, delta is the minimal distance between two peaks.
         - window: [bool] If True, delta also gives the minimal distance between peaks.
+        - interpolate: If True the maximizing time lags are found by interpolation.
         - verbose: If True prints event info
         """
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
         self.delta = delta
         self.window = window
+        self.interpolate = interpolate
         self.verbose = verbose
 
 
+@dataclass
+class CCOptions(TDEOptions):
+    def __init__(self, interpolate: bool = False):
+        """
+        - interpolate: If True the maximizing time lags are found by interpolation.
+        """
+        self.interpolate = interpolate
+
+
+class TDEMethod(Enum):
+    CrossCorrelation = 1
+    ConditionalAveraging = 2
+    CrossCorrelationRM = 3
+    CCFit = 4
+
+
+class TDEDelegator:
+    def __init__(self, method: TDEMethod, options):
+        self.method = method
+        self.options = options
+
+    def estimate_time_delay(self, x: np.ndarray, y: np.ndarray, dt: float):
+        match self.method:
+            case TDEMethod.CrossCorrelation:
+                return estimate_time_delay_ccmax(x, y, dt, self.options)
+            case TDEMethod.ConditionalAveraging:
+                return estimate_time_delay_ccond_av_max(x, y, dt, self.options)
+            case TDEMethod.CrossCorrelationRM:
+                return estimate_time_delay_ccmax_running_mean(x, y, dt, self.options)
+            case TDEMethod.CCFit:
+                return estimate_time_delay_ccf_fit(x, y, dt, self.options)
+
+
 def estimate_time_delay_ccf_fit(
-    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions
+    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CCFitOptions
 ):
     """Estimates the average time delay between to signals by fitting the
     cross-correlation function to an analytical expression.
@@ -275,11 +324,11 @@ def estimate_time_delay_ccf_fit(
 
     c, t0, taud = minimization.x[0], minimization.x[1], minimization.x[2]
 
-    return t0, ccf_value
+    return t0, ccf_value, 0
 
 
 def get_ccf_fit_data(
-    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CcfFitEstimationOptions
+    x: np.ndarray, y: np.ndarray, dt: float, estimation_options: CCFitOptions
 ):
     """Used for debugging estimate_time_delay_ccf_fit.
 
@@ -313,7 +362,7 @@ def get_ccf_fit_data(
 
 
 def estimate_time_delay_ccmax(
-    x: np.ndarray, y: np.ndarray, dt: float, interpolate: bool = False
+    x: np.ndarray, y: np.ndarray, dt: float, options: CCOptions
 ):
     """Estimates the average time delay between to signals by finding the time
     lag that maximizes the cross-correlation function. If interpolate is True
@@ -328,8 +377,8 @@ def estimate_time_delay_ccmax(
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
     max_time, ccf_value = ccf_times[max_index], ccf[max_index]
-    if not interpolate:
-        return max_time, ccf_value
+    if not options.interpolate:
+        return max_time, ccf_value, 0
 
     # If the maximum is very close to the origin, we make an interpolation window of 20 discretization times in
     # each direction, otherwise, the interpolation window is twice the time maximum in each direction.
@@ -342,14 +391,14 @@ def estimate_time_delay_ccmax(
         ccf_times[interpolation_window], ccf[interpolation_window]
     )
 
-    return max_time_interpolate, ccf_value
+    return max_time_interpolate, ccf_value, 0
 
 
 def estimate_time_delay_ccmax_running_mean(
     x: np.ndarray,
     y: np.ndarray,
     dt: float,
-    interpolate: bool = False,
+    options: CCOptions,
     extra_debug_info: str = "",
 ):
     """
@@ -377,16 +426,16 @@ def estimate_time_delay_ccmax_running_mean(
     ccf, n = _run_mean_and_locate_maxima(ccf)
     if ccf is None:
         warnings.warn("Maximum running window achieved " + extra_debug_info)
-        return None, None
+        return None, None, None
     if n > 1:
-        ccf_times = ccf_times[int(n / 2): -int(n / 2)]
+        ccf_times = ccf_times[int(n / 2) : -int(n / 2)]
 
     # Maximum might have changed after running mean
     max_index = np.argmax(ccf)
     max_time, ccf_value = ccf_times[max_index], ccf[max_index]
 
-    if not interpolate:
-        return max_time, ccf_value
+    if not options.interpolate:
+        return max_time, ccf_value, 0
 
     interpolation_window = np.abs(ccf_times - max_time) < 20 * dt
 
@@ -394,7 +443,7 @@ def estimate_time_delay_ccmax_running_mean(
         ccf_times[interpolation_window], ccf[interpolation_window]
     )
 
-    return max_time_interpolate, ccf_value
+    return max_time_interpolate, ccf_value, 0
 
 
 def get_time_delay_ccmax_rm_data(
@@ -425,7 +474,7 @@ def get_time_delay_ccmax_rm_data(
     if ccf_rm is None:
         return None
     if n > 1:
-        ccf_times_rm = ccf_times[int(n / 2): -int(n / 2)]
+        ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
 
     # Maximum might have changed after running mean
     max_index = np.argmax(ccf_rm)
@@ -481,10 +530,9 @@ def _find_maximum_interpolate(x, y):
 
 def estimate_time_delay_ccond_av_max(
     x: np.ndarray,
-    x_t: np.ndarray,
     y: np.ndarray,
-    cond_av_eo: ConditionalAvgEstimationOptions,
-    interpolate: bool = False,
+    dt: float,
+    cond_av_eo: ConditionalAvgOptions,
 ):
     """Estimates the average time delay by finding the time lag that maximizes
     the cross conditional average of signal x when signal y is larger than
@@ -506,6 +554,8 @@ def estimate_time_delay_ccond_av_max(
         float: Cross conditional variance at a time lag td.
         int: Number of events larger than 2.5 the mean value
     """
+    x_t = np.arange(0, dt * len(x), dt)
+
     _, s_av, s_var, t_av, peaks, _ = cond_av(
         x,
         x_t,
@@ -518,7 +568,9 @@ def estimate_time_delay_ccond_av_max(
     )
     max_index = np.argmax(s_av)
     return_time = (
-        _find_maximum_interpolate(t_av, s_av) if interpolate else t_av[max_index]
+        _find_maximum_interpolate(t_av, s_av)
+        if cond_av_eo.interpolate
+        else t_av[max_index]
     )
 
     return return_time, s_var[max_index], len(peaks)
