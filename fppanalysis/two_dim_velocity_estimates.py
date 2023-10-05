@@ -1,6 +1,7 @@
 import warnings
 
 import fppanalysis.time_delay_estimation as tde
+from fppanalysis import utils
 import numpy as np
 import xarray as xr
 from dataclasses import dataclass
@@ -204,83 +205,6 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     return vx, vy
 
 
-def _get_rz(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.x.isel(x=x).values, ds.y.isel(y=y).values
-    raise "Unknown format"
-
-
-def _get_rz_full(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        shape = (len(ds.x.values), len(ds.y.values))
-        R = np.zeros(shape=shape)
-        Z = np.zeros(shape=shape)
-        for x in ds.x.values:
-            for y in ds.y.values:
-                R[x, y] = ds.R.isel(x=x, y=y).values
-                Z[x, y] = ds.Z.isel(x=x, y=y).values
-        return R, Z
-    # 2d code
-    if hasattr(ds, "t"):
-        return np.meshgrid(ds.x.values, ds.y.values)
-    raise "Unknown format"
-
-
-def _get_signal(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        # return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
-        return ds.isel(x=x, y=y)["frames"].values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
-    raise "Unknown format"
-
-
-def _get_dt(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        times = ds["time"]
-        return times[1].values - times[0].values
-    # 2d code
-    if hasattr(ds, "t"):
-        times = ds["t"]
-        return times[1].values - times[0].values
-    raise "Unknown format"
-
-
-def _get_time(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).time.values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.t.values
-    raise "Unknown format"
-
-
-def _is_pixel_dead(x):
-    return np.isnan(x[0])
-
-
-def _estimate_time_delay(p1, p0, ds, tde_delegator: tde.TDEDelegator):
-    extra_debug_info = "Between pixels {} and {}".format(p1, p0)
-
-    x = _get_signal(p1[0], p1[1], ds)
-    y = _get_signal(p0[0], p0[1], ds)
-    dt = _get_dt(ds)
-
-    if _is_pixel_dead(x) or _is_pixel_dead(y):
-        return None, None, None
-
-    return tde_delegator.estimate_time_delay(x, y, dt, extra_debug_info)
-
-
 def _estimate_velocities_given_points(
     p0, p1, p2, ds, tde_delegator: tde.TDEDelegator, use_2d_estimation: bool
 ):
@@ -289,8 +213,8 @@ def _estimate_velocities_given_points(
 
     This is specified in method argument.
     """
-    delta_ty, cy, events_y = _estimate_time_delay(p2, p0, ds, tde_delegator)
-    delta_tx, cx, events_x = _estimate_time_delay(p1, p0, ds, tde_delegator)
+    delta_ty, cy, events_y = tde_delegator.estimate_time_delay(p2, p0, ds)
+    delta_tx, cx, events_x = tde_delegator.estimate_time_delay(p1, p0, ds)
 
     # If for some reason the time delay cannot be estimated, we return None
     if delta_tx is None or delta_ty is None:
@@ -299,9 +223,9 @@ def _estimate_velocities_given_points(
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    r0, z0 = _get_rz(p0[0], p0[1], ds)
-    r1, z1 = _get_rz(p1[0], p1[1], ds)
-    r2, z2 = _get_rz(p2[0], p2[1], ds)
+    r0, z0 = utils.get_rz(p0[0], p0[1], ds)
+    r1, z1 = utils.get_rz(p1[0], p1[1], ds)
+    r2, z2 = utils.get_rz(p2[0], p2[1], ds)
 
     if use_2d_estimation:
         return (
@@ -317,20 +241,16 @@ def _estimate_velocities_given_points(
         )
 
 
-def _is_within_boundaries(p, ds):
-    return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
-
-
 def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     """Returns true if the time lag that maximizes the cross-correlation
     function measure at p0 and p1 is not zero
     """
     import fppanalysis.correlation_function as cf
 
-    signal0 = _get_signal(p0[0], p0[1], ds)
-    signal1 = _get_signal(p1[0], p1[1], ds)
+    signal0 = utils.get_signal(p0[0], p0[1], ds)
+    signal1 = utils.get_signal(p1[0], p1[1], ds)
 
-    if _is_pixel_dead(signal1):
+    if utils.is_pixel_dead(signal1):
         return False
 
     # No need to compute the ccf if the min lag is 0
@@ -338,7 +258,7 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
         return True
 
     ccf_times, ccf = cf.corr_fun(
-        signal0, signal1, dt=_get_dt(ds), biased=True, norm=True
+        signal0, signal1, dt=utils.get_dt(ds), biased=True, norm=True
     )
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
@@ -346,7 +266,7 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
 
     fulfills_constrain = np.abs(
         ccf_times[max_index]
-    ) >= neighbors_ccf_min_lag * _get_dt(ds)
+    ) >= neighbors_ccf_min_lag * utils.get_dt(ds)
     if not fulfills_constrain:
         warnings.warn(
             "Pixel {} does not fulfill cross-correlation time lag condition with respect to pixel of {}."
@@ -361,7 +281,7 @@ def _find_neighbors(x, y, ds: xr.Dataset, neighbors_ccf_min_lag: int):
         # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
         if neighbors_ccf_min_lag == -1:
             return False
-        return _is_within_boundaries(p, ds) and not _check_ccf_constrains(
+        return utils.is_within_boundaries(p, ds) and not _check_ccf_constrains(
             (x, y), p, ds, neighbors_ccf_min_lag
         )
 
@@ -419,10 +339,10 @@ def estimate_velocities_for_pixel(
     Returns:
         PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
-    r_pos, z_pos = _get_rz(x, y, ds)
+    r_pos, z_pos = utils.get_rz(x, y, ds)
 
     # If the reference pixel is dead, return empty data right away
-    if _is_pixel_dead(_get_signal(x, y, ds)):
+    if utils.is_pixel_dead(utils.get_signal(x, y, ds)):
         return PixelData(r_pos=r_pos, z_pos=z_pos)
 
     h_neighbors, v_neighbors = _find_neighbors(
@@ -439,9 +359,9 @@ def estimate_velocities_for_pixel(
             (x, y), px, py, ds, tde_delegator, estimation_options.use_2d_estimation
         )
         for px in h_neighbors
-        if _is_within_boundaries(px, ds)
+        if utils.is_within_boundaries(px, ds)
         for py in v_neighbors
-        if _is_within_boundaries(py, ds)
+        if utils.is_within_boundaries(py, ds)
     ]
 
     results = [r for r in results if r is not None]

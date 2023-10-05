@@ -4,6 +4,7 @@ import numpy as np
 from scipy.stats import gamma, rv_continuous
 import fppanalysis.correlation_function as cf
 from fppanalysis.conditional_averaging import cond_av
+from fppanalysis import utils
 import matplotlib.pyplot as plt
 from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
@@ -277,9 +278,15 @@ class TDEDelegator:
         self.method = method
         self.options = options
 
-    def estimate_time_delay(
-        self, x: np.ndarray, y: np.ndarray, dt: float, extra_debug_info: str = ""
-    ):
+    def estimate_time_delay(self, p1, p0, ds):
+        extra_debug_info = "Between pixels {} and {}".format(p1, p0)
+        x = utils.get_signal(p1[0], p1[1], ds)
+        y = utils.get_signal(p0[0], p0[1], ds)
+        dt = utils.get_dt(ds)
+
+        if utils.is_pixel_dead(x) or utils.is_pixel_dead(y):
+            return None, None, None
+
         match self.method:
             case TDEMethod.CrossCorrelation:
                 return estimate_time_delay_ccmax(
