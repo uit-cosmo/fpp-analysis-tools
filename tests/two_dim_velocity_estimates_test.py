@@ -58,7 +58,10 @@ def test_rad_and_pol():
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -75,21 +78,14 @@ def test_full():
     assert np.max(np.abs(vx - np.ones(shape=(4, 3)))) < 0.1, "Numerical error too big"
 
 
-def test_full_parallel():
-    v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
-    eo = get_estimation_options()
-    eo.num_cores = 4
-    movie_data = td.estimate_velocity_field(ds, eo)
-    vx = movie_data.get_vx()
-    assert np.max(np.abs(vx - np.ones(shape=(4, 3)))) < 0.1, "Numerical error too big"
-
-
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -101,7 +97,10 @@ def test_rad_and_2pol():
     v, w = 1, 2
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -117,7 +116,10 @@ def test_cond_av():
     estimation_options.method = tde.TDEMethod.ConditionalAveraging
     estimation_options.cond_av_eo = cond_av_eo
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -136,7 +138,10 @@ def test_cond_av_interpolate():
     estimation_options.cond_av_eo = cond_av_eo
 
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -168,7 +173,10 @@ def test_ignore_dead_pixels():
     ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
     pd = td.estimate_velocities_for_pixel(1, 1, mock_ds, get_estimation_options())
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -186,7 +194,10 @@ def test_interpolate():
     eo.method = tde.TDEMethod.CrossCorrelationRM
     eo.cc_options.interpolate = True
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -202,7 +213,10 @@ def test_neighbours():
     estimation_options = get_estimation_options()
     estimation_options.neighbors_ccf_min_lag = 1
     pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )
@@ -216,7 +230,10 @@ def test_cross_corr_fit():
     eo = get_estimation_options()
     eo.method = tde.TDEMethod.CCFit
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
-    v_est, w_est, = (
+    (
+        v_est,
+        w_est,
+    ) = (
         pd.vx,
         pd.vy,
     )

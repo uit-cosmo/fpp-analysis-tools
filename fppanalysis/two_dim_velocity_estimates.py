@@ -14,7 +14,6 @@ class EstimationOptions:
         method: tde.TDEMethod = tde.TDEMethod.CrossCorrelation,
         use_2d_estimation: bool = True,
         neighbors_ccf_min_lag: int = 0,
-        num_cores: int = 1,
         cache: bool = True,
         cc_options: tde.CCOptions = tde.CCOptions(),
         cond_av_options: tde.ConditionalAvgOptions = tde.ConditionalAvgOptions(),
@@ -30,7 +29,6 @@ class EstimationOptions:
         time. If that's not the case, the next neighbor will be used, and so on until a
         neighbor pixel is found complient to this condition. If set to -1, no condition will
         be applied.
-        - num_cores: Number of cores to use.
         - cache: bool, if True TDE results are cached
         = cond_av_eo: Conditional average estimation options to be used if method = "cond_av"
         - ccf_fit_eo: Time delay estimation options to be used if method = "cross_corr_fit"
@@ -38,7 +36,6 @@ class EstimationOptions:
         self.method = method
         self.use_2d_estimation = use_2d_estimation
         self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
-        self.num_cores = num_cores
         self.cache = cache
         self.cc_options = cc_options
         self.cond_av_eo = cond_av_options
@@ -100,19 +97,18 @@ class MovieData:
 
     def _set_pixel(self, items):
         i, j = items[0], items[1]
-        return estimate_velocities_for_pixel(
-            i, j, self.ds, self.estimation_options, self.tde_delegator
-        )
-        # try:
-        #    return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options, self.tde_delegator)
-        # except:
-        #    print(
-        #        "Issues estimating velocity for pixel",
-        #        i,
-        #        j,
-        #        "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-        #    )
-        # return PixelData()
+        try:
+            return estimate_velocities_for_pixel(
+                i, j, self.ds, self.estimation_options, self.tde_delegator
+            )
+        except:
+            print(
+                "Issues estimating velocity for pixel",
+                i,
+                j,
+                "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+            )
+        return PixelData()
 
     def __init__(self, ds, estimation_options: EstimationOptions):
         range_r, range_z = range(0, len(ds.x.values)), range(0, len(ds.y.values))
@@ -127,20 +123,9 @@ class MovieData:
         )
         self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
-        from pathos.multiprocessing import ProcessPool
-
-        if estimation_options.num_cores > 1:
-            pool = ProcessPool(estimation_options.num_cores)
-            results = pool.map(
-                self._set_pixel, [(j, i) for i in range_z for j in range_r]
-            )
-            for i in range_z:
-                for j in range_r:
-                    self.pixels[i][j] = results[len(range_r) * i + j]
-        else:
-            for i in range_z:
-                for j in range_r:
-                    self.pixels[i][j] = self._set_pixel((j, i))
+        for i in range_z:
+            for j in range_r:
+                self.pixels[i][j] = self._set_pixel((j, i))
 
     def _get_field(self, field_name):
         return np.array(
