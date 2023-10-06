@@ -3,7 +3,10 @@ import xarray as xr
 
 
 def get_rz(x, y, ds):
-    # Sajidah's format
+    """
+    Get R and Z values for an index
+    """
+    # Exp format
     if hasattr(ds, "time"):
         return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
     # 2d code
@@ -13,7 +16,10 @@ def get_rz(x, y, ds):
 
 
 def get_rz_full(ds):
-    # Sajidah's format
+    """
+    Get all R and Z values
+    """
+    # Exp format
     if hasattr(ds, "time"):
         shape = (len(ds.x.values), len(ds.y.values))
         R = np.zeros(shape=shape)
@@ -30,7 +36,10 @@ def get_rz_full(ds):
 
 
 def get_signal(x, y, ds):
-    # Sajidah's format
+    """
+    Get signal at a given indexes.
+    """
+    # Exp format
     if hasattr(ds, "time"):
         # return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
         return ds.isel(x=x, y=y)["frames"].values
@@ -41,7 +50,10 @@ def get_signal(x, y, ds):
 
 
 def get_dt(ds):
-    # Sajidah's format
+    """
+    Get sampling time
+    """
+    # Exp format
     if hasattr(ds, "time"):
         times = ds["time"]
         return times[1].values - times[0].values
@@ -53,7 +65,10 @@ def get_dt(ds):
 
 
 def get_time(x, y, ds):
-    # Sajidah's format
+    """
+    Get time array for given indexes
+    """
+    # Exp format
     if hasattr(ds, "time"):
         return ds.isel(x=x, y=y).time.values
     # 2d code
@@ -63,8 +78,14 @@ def get_time(x, y, ds):
 
 
 def is_pixel_dead(x):
+    """
+    Returns True if the length of the signal is 0, or if the first element is np.nan
+    """
     return len(x) == 0 or np.isnan(x[0])
 
 
 def is_within_boundaries(p, ds):
+    """
+    Returns True if the tuple p represents indexes within the ranges of the dataset.
+    """
     return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
