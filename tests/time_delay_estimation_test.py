@@ -15,10 +15,10 @@ def test_interpolate():
     x = u.get_signal(0, 0, ds)
     y = u.get_signal(1, 0, ds)
 
-    td_interpolate, _, _ = tde.estimate_time_delay_ccmax_running_mean(
+    td_interpolate, _, _ = tde.estimate_time_delay_ccf(
         y, x, dt, tde.CCOptions(cc_window=100, interpolate=True)
     )
-    td_no_interpolate, _, _ = tde.estimate_time_delay_ccmax_running_mean(
+    td_no_interpolate, _, _ = tde.estimate_time_delay_ccf(
         y, x, dt, tde.CCOptions(cc_window=100, interpolate=False)
     )
 
@@ -39,3 +39,9 @@ def test_local_maxima():
 def test_local_maxima_only_if_big_enough():
     x = np.array([0, 1, 0, 0.4, 0])
     assert tde._count_local_maxima(x) == 1
+
+
+def test_no_result_if_no_local_maxima():
+    x = np.array([0, 1, 2, 4, 6])
+    res, _ = tde._run_mean_and_locate_maxima(x)
+    assert res is None

@@ -5,52 +5,64 @@ from fppanalysis import utils
 import numpy as np
 import xarray as xr
 from dataclasses import dataclass
-from typing import Union
 
 
 class EstimationOptions:
     def __init__(
         self,
-        method: tde.TDEMethod = tde.TDEMethod.CrossCorrelation,
-        use_2d_estimation: bool = True,
+        method: tde.TDEMethod = tde.TDEMethod.CC,
+        use_3point_method: bool = True,
         neighbors_ccf_min_lag: int = 0,
         cache: bool = True,
         cc_options: tde.CCOptions = tde.CCOptions(),
-        cond_av_options: tde.ConditionalAvgOptions = tde.ConditionalAvgOptions(),
-        ccf_fit_options: tde.CCFitOptions = tde.CCFitOptions(),
+        ca_options: tde.CAOptions = tde.CAOptions(),
+        ccf_options: tde.CCFitOptions = tde.CCFitOptions(),
     ):
         """
         Estimation options for velocity estimation method.
 
         - method: fppanalysis.time_delay_estimation.TDEMethod Specifies the time delay method to be used.
-        - use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
+        - use_3point_method: [bool] If False, use 2 point method to estimate velocities from time delays.
         - neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
         pixels occurs at a time smaller than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
         neighbor pixel is found complient to this condition. If set to -1, no condition will
         be applied.
         - cache: bool, if True TDE results are cached
-        = cond_av_eo: Conditional average estimation options to be used if method = "cond_av"
-        - ccf_fit_eo: Time delay estimation options to be used if method = "cross_corr_fit"
+        - cc_options: Cross correlation estimation options to be used if method = TDEMethod.CC
+        - ca_options: Conditional average estimation options to be used if method = TDEMethod.CA
+        - ccf_options: Time delay estimation options to be used if method = TDEMethod.CCFit
         """
         self.method = method
-        self.use_2d_estimation = use_2d_estimation
+        self.use_3point_method = use_3point_method
         self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
         self.cache = cache
         self.cc_options = cc_options
-        self.cond_av_eo = cond_av_options
-        self.ccf_fit_eo = ccf_fit_options
+        self.ca_options = ca_options
+        self.ccf_options = ccf_options
 
     def get_time_delay_options(self):
         match self.method:
-            case tde.TDEMethod.CrossCorrelation:
+            case tde.TDEMethod.CC:
                 return self.cc_options
-            case tde.TDEMethod.ConditionalAveraging:
-                return self.cond_av_eo
-            case tde.TDEMethod.CrossCorrelationRM:
-                return self.cc_options
+            case tde.TDEMethod.CA:
+                return self.ca_options
             case tde.TDEMethod.CCFit:
-                return self.ccf_fit_eo
+                return self.ccf_options
+
+    def __str__(self):
+        """
+        Return a string representation of the EstimationOptions object.
+        """
+        return (
+            f"Method: {self.method}, "
+            f"Use 3-Point Method: {self.use_3point_method}, "
+            f"Neighbors CCF Min Lag: {self.neighbors_ccf_min_lag}, "
+            f"Cache: {self.cache}, "
+            f"CC Options: {str(self.cc_options)}, "
+            f"CA Options: {str(self.ca_options)}, "
+            f"CCF Options: {str(self.ccf_options)}"
+        )
 
 
 @dataclass
@@ -351,7 +363,7 @@ def estimate_velocities_for_pixel(
 
     results = [
         _estimate_velocities_given_points(
-            (x, y), px, py, ds, tde_delegator, estimation_options.use_2d_estimation
+            (x, y), px, py, ds, tde_delegator, estimation_options.use_3point_method
         )
         for px in h_neighbors
         if utils.is_within_boundaries(px, ds)

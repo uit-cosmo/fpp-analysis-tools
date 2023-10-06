@@ -229,9 +229,15 @@ class CCFitOptions(TDEOptions):
         c, t0, taud = params[0], params[1], params[2]
         return c * np.exp(-np.abs(times - t0) / taud)
 
+    def __str__(self):
+        """
+        Return a string representation of the CCFitOptions object.
+        """
+        return f"Fit Window: {self.fit_window}, Initial Guess: {self.initial_guess}, Interpolate: {self.interpolate}"
+
 
 @dataclass
-class ConditionalAvgOptions(TDEOptions):
+class CAOptions(TDEOptions):
     def __init__(
         self,
         min_threshold: float = 2.5,
@@ -256,24 +262,57 @@ class ConditionalAvgOptions(TDEOptions):
         self.interpolate = interpolate
         self.verbose = verbose
 
+    def __str__(self):
+        """
+        Return a string representation of the CAOptions object.
+        """
+        return f"Min Threshold: {self.min_threshold}, Max Threshold: {self.max_threshold}, Delta: {self.delta}, Window: {self.window}, Interpolate: {self.interpolate}, Verbose: {self.verbose}"
+
 
 @dataclass
 class CCOptions(TDEOptions):
-    def __init__(self, cc_window: int = 100, interpolate: bool = False):
+    def __init__(
+        self,
+        cc_window: float = None,
+        running_mean: bool = True,
+        running_mean_window_max: int = 7,
+        interpolate: bool = False,
+    ):
         """
         - cc_window: int time lag window for the cross-correlation function computation.
-        If set to T, the cross-correlation function is computed for time lags [-T, T].
+        If set to T, the cross-correlation function is computed for time lags [-T, T]. If set to None,
+        100 sampling times will be used as default
+        - running_mean: bool, if True, a running mean is applied to the estimated cross-correlation.
+        The length of the running mean is determined as the minimum length such that the
+        resulting cross-correlation has only one local maximum up to a factor 2. If the running mean
+        window exceeds running_mean_window_max, a None result is returned and a warning is printed,
+        indicating that either the ccf is nonunimodal, or that the data is too poor to estimate a time
+        delay.
         - interpolate: If True the maximizing time lags are found by interpolation.
         """
         self.cc_window = cc_window
+        self.running_mean = running_mean
+        self.window_max = running_mean_window_max
         self.interpolate = interpolate
+
+    def __str__(self):
+        """
+        Return a string representation of the CCOptions object.
+        """
+        return f"CC Window: {self.cc_window}, Running Mean: {self.running_mean}, Running Mean Window Max: {self.window_max}, Interpolate: {self.interpolate}"
 
 
 class TDEMethod(Enum):
-    CrossCorrelation = 1
-    ConditionalAveraging = 2
-    CrossCorrelationRM = 3
-    CCFit = 4
+    """
+    Possible implemented methods.
+    CC = cross-correlation based,
+    CA = conditional average based,
+    CCFit = cross-correlation fit based
+    """
+
+    CC = 1
+    CA = 2
+    CCFit = 3
 
 
 class TDEDelegator:
@@ -321,16 +360,10 @@ class TDEDelegator:
             return None, None, None
 
         match self.method:
-            case TDEMethod.CrossCorrelation:
-                return estimate_time_delay_ccmax(
-                    x, y, dt, self.options, extra_debug_info
-                )
-            case TDEMethod.ConditionalAveraging:
+            case TDEMethod.CC:
+                return estimate_time_delay_ccf(x, y, dt, self.options, extra_debug_info)
+            case TDEMethod.CA:
                 return estimate_time_delay_ccond_av_max(
-                    x, y, dt, self.options, extra_debug_info
-                )
-            case TDEMethod.CrossCorrelationRM:
-                return estimate_time_delay_ccmax_running_mean(
                     x, y, dt, self.options, extra_debug_info
                 )
             case TDEMethod.CCFit:
@@ -415,44 +448,7 @@ def get_ccf_fit_data(
     )
 
 
-def estimate_time_delay_ccmax(
-    x: np.ndarray,
-    y: np.ndarray,
-    dt: float,
-    options: CCOptions,
-    extra_debug_info: str = "",
-):
-    """Estimates the average time delay between to signals by finding the time
-    lag that maximizes the cross-correlation function. If interpolate is True
-    the maximizing lag is found by interpolation.
-
-    Returns:
-        td Estimated time delay
-        C Cross correlation at a time lag td.
-    """
-    ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
-    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
-    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
-    max_index = np.argmax(ccf)
-    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
-    if not options.interpolate:
-        return max_time, ccf_value, 0
-
-    # If the maximum is very close to the origin, we make an interpolation window of 20 discretization times in
-    # each direction, otherwise, the interpolation window is twice the time maximum in each direction.
-    interpolation_window_boundary = (
-        20 * dt if np.abs(max_time) < 10 * dt else np.abs(max_time) * 2
-    )
-    interpolation_window = np.abs(ccf_times) < interpolation_window_boundary
-
-    max_time_interpolate = _find_maximum_interpolate(
-        ccf_times[interpolation_window], ccf[interpolation_window], extra_debug_info
-    )
-
-    return max_time_interpolate, ccf_value, 0
-
-
-def estimate_time_delay_ccmax_running_mean(
+def estimate_time_delay_ccf(
     x: np.ndarray,
     y: np.ndarray,
     dt: float,
@@ -461,33 +457,48 @@ def estimate_time_delay_ccmax_running_mean(
 ):
     """
     Estimates the average time delay between to signals by finding the time
-    lag that maximizes the cross-correlation function. If the number of local maxima
-    in the provided window is larger than 1, a running mean is applied on the estimated
-    cross-correlation function with a running mean window of a size that will be
-    increased gradually til the resulting cross-correlation function only has
-    1 local maxima.
-    If interpolate is True the maximizing lag is found by interpolation.
+    lag that maximizes the cross-correlation function.
+    Arguments:
+        - x, y: Signals
+        - dt: Sampling time
+        - options: CCOptions, estimation options, see documentation for class CCOptions.
+        - extra_debug_info: String to be appended to warnings printed by this function.
     Returns:
         td Estimated time delay
         ccf Cross-correlation value at the estimated time delay
 
     """
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
-    find_window = np.abs(ccf_times) < options.cc_window
+
+    # Cut ccf to the window of interest.
+    find_window = np.abs(ccf_times) < (
+        options.cc_window if options.cc_window is not None else 100 * dt
+    )
     ccf_times = ccf_times[find_window]
     ccf = ccf[find_window]
 
-    ccf, n = _run_mean_and_locate_maxima(ccf)
+    if not options.running_mean:
+        max_index = np.argmax(ccf)
+        max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+        if not options.interpolate:
+            return max_time, ccf_value, 0
+
+        max_time_interpolate = _find_maximum_interpolate(
+            ccf_times, ccf, extra_debug_info
+        )
+
+        return max_time_interpolate, ccf_value, 0
+
+    ccf, n = _run_mean_and_locate_maxima(
+        ccf, max_run_window_size=options.window_max, extra_debug_info=extra_debug_info
+    )
     if ccf is None:
-        warnings.warn("Maximum running window achieved " + extra_debug_info)
         return None, None, None
     if n > 1:
         ccf_times = ccf_times[int(n / 2) : -int(n / 2)]
 
-    # Maximum might have changed after running mean
     max_index = np.argmax(ccf)
     max_time, ccf_value = ccf_times[max_index], ccf[max_index]
-
     if not options.interpolate:
         return max_time, ccf_value, 0
 
@@ -523,7 +534,7 @@ def get_time_delay_ccmax_rm_data(
     ccf_times = ccf_times[find_window]
     ccf = ccf[find_window]
 
-    ccf_rm, n = _run_mean_and_locate_maxima(ccf)
+    ccf_rm, n = _run_mean_and_locate_maxima(ccf, extra_debug_info)
     ccf_times_rm = ccf_times
     if ccf_rm is None:
         return None
@@ -548,13 +559,21 @@ def get_time_delay_ccmax_rm_data(
     return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time_interpolate, max_ccf_value
 
 
-def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
+def _run_mean_and_locate_maxima(ccf, max_run_window_size=7, extra_debug_info=""):
     ccf_mean = ccf
     n = 1
-    while _count_local_maxima(ccf_mean) > 1:
+    while (lm := _count_local_maxima(ccf_mean)) != 1:
+        if lm == 0:
+            warnings.warn(
+                "Cross-correlation function has no local maxima. " + extra_debug_info
+            )
+            return None, n
+
         n = n + 2
         if n > max_run_window_size:
+            warnings.warn("Maximum running window achieved " + extra_debug_info)
             return None, n
+
         ccf_mean = np.convolve(ccf, np.ones(n) / n, mode="valid")
     return ccf_mean, n
 
@@ -565,6 +584,9 @@ def _count_local_maxima(ccf):
 
     # Only count the local maxima that are at least half the value of the global maxima
     args = ccf[np.where(local_maxima)[0]]
+    if len(args) == 0:
+        return 0
+
     elegible_local_maxima = np.where(args > 0.5 * max(args))[0]
     return len(elegible_local_maxima)
 
@@ -593,7 +615,7 @@ def estimate_time_delay_ccond_av_max(
     x: np.ndarray,
     y: np.ndarray,
     dt: float,
-    cond_av_eo: ConditionalAvgOptions,
+    cond_av_eo: CAOptions,
     extra_debug_info: str = "",
 ):
     """Estimates the average time delay by finding the time lag that maximizes

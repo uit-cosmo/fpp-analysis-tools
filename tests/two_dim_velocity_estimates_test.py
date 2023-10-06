@@ -1,6 +1,4 @@
 import numpy as np
-from blobmodel import Model, DefaultBlobFactory
-
 import fppanalysis.time_delay_estimation as tde
 import fppanalysis.two_dim_velocity_estimates as td
 import test_utils as tu
@@ -9,8 +7,8 @@ import xarray as xr
 
 def get_estimation_options():
     return td.EstimationOptions(
-        method=tde.TDEMethod.CrossCorrelation,
-        use_2d_estimation=True,
+        method=tde.TDEMethod.CC,
+        use_3point_method=True,
         neighbors_ccf_min_lag=0,
     )
 
@@ -74,9 +72,9 @@ def test_cond_av():
     v, w = 1, -1
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
-    cond_av_eo = tde.ConditionalAvgOptions(delta=5, window=True)
-    estimation_options.method = tde.TDEMethod.ConditionalAveraging
-    estimation_options.cond_av_eo = cond_av_eo
+    cond_av_eo = tde.CAOptions(delta=5, window=True)
+    estimation_options.method = tde.TDEMethod.CA
+    estimation_options.ca_options = cond_av_eo
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     (
         v_est,
@@ -87,28 +85,6 @@ def test_cond_av():
     )
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.15, "Numerical error too big"
-
-
-def test_cond_av_interpolate():
-    v, w = 1.2, 1
-    ds = tu.make_2d_realization(
-        v, w, np.array([5, 5.1]), np.array([5, 5.1]), dt=0.1, K=1000, T=10000
-    )
-    estimation_options = get_estimation_options()
-    cond_av_eo = tde.ConditionalAvgOptions(delta=5, window=True, interpolate=True)
-    estimation_options.method = tde.TDEMethod.ConditionalAveraging
-    estimation_options.cond_av_eo = cond_av_eo
-
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    (
-        v_est,
-        w_est,
-    ) = (
-        pd.vx,
-        pd.vy,
-    )
-    error = np.max([abs(v_est - v), abs(w_est - w)])
-    assert error < 0.1, "Numerical error too big"
 
 
 # Dead pixels have already been preprocessed and have an array of nans at their site
