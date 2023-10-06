@@ -3,46 +3,8 @@ from blobmodel import Model, DefaultBlobFactory
 
 import fppanalysis.time_delay_estimation as tde
 import fppanalysis.two_dim_velocity_estimates as td
+import test_utils as tu
 import xarray as xr
-
-
-def make_2d_realization(
-    vx, vy, xpoints, ypoints, T=1000, K=1000, Lx=10, Ly=10, taup=1e10, dt=0.01
-):
-    bf = DefaultBlobFactory(
-        A_dist="deg",
-        vx_dist="deg",
-        vy_dist="deg",
-        vy_parameter=vy,
-        vx_parameter=vx,
-    )
-    bm = Model(
-        Nx=10,
-        Ny=1,
-        Lx=Lx,
-        Ly=Ly,
-        dt=dt,
-        T=T,
-        num_blobs=K,
-        blob_shape="gauss",
-        periodic_y=True,
-        t_drain=taup,
-        blob_factory=bf,
-    )
-    update_geometry(xpoints, ypoints, bm)
-    return bm.make_realization(speed_up=True, error=10e-2)
-
-
-# Change the geometry of the 2d model to lie similar to APD data.
-def update_geometry(x_grid, y_grid, model):
-    x_matrix, y_matrix, t_matrix = np.meshgrid(x_grid, y_grid, model._geometry.t)
-    model._geometry.x_matrix = x_matrix
-    model._geometry.y_matrix = y_matrix
-    model._geometry.t_matrix = t_matrix
-    model._geometry.Ny = len(y_grid)
-    model._geometry.Nx = len(x_grid)
-    model._geometry.x = x_grid
-    model._geometry.y = y_grid
 
 
 def get_estimation_options():
@@ -55,7 +17,7 @@ def get_estimation_options():
 
 def test_rad_and_pol():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
     pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
     (
@@ -71,7 +33,7 @@ def test_rad_and_pol():
 
 def test_full():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
     eo = get_estimation_options()
     movie_data = td.estimate_velocity_field(ds, eo)
     vx = movie_data.get_vx()
@@ -80,7 +42,7 @@ def test_full():
 
 def test_rad_and_neg_pol():
     v, w = 1, -1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
     (
         v_est,
@@ -95,7 +57,7 @@ def test_rad_and_neg_pol():
 
 def test_rad_and_2pol():
     v, w = 1, 2
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
     (
         v_est,
@@ -110,7 +72,7 @@ def test_rad_and_2pol():
 
 def test_cond_av():
     v, w = 1, -1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
     cond_av_eo = tde.ConditionalAvgOptions(delta=5, window=True)
     estimation_options.method = tde.TDEMethod.ConditionalAveraging
@@ -129,7 +91,7 @@ def test_cond_av():
 
 def test_cond_av_interpolate():
     v, w = 1.2, 1
-    ds = make_2d_realization(
+    ds = tu.make_2d_realization(
         v, w, np.array([5, 5.1]), np.array([5, 5.1]), dt=0.1, K=1000, T=10000
     )
     estimation_options = get_estimation_options()
@@ -170,7 +132,7 @@ class MockXDS(xr.Dataset):
 
 def test_ignore_dead_pixels():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
     pd = td.estimate_velocities_for_pixel(1, 1, mock_ds, get_estimation_options())
     (
@@ -186,7 +148,7 @@ def test_ignore_dead_pixels():
 
 def test_neighbours():
     v, w = 1.05, 1.05
-    ds = make_2d_realization(
+    ds = tu.make_2d_realization(
         v, w, np.array([5, 5.1, 5.2]), np.array([5, 5.1, 5.2]), dt=0.1
     )
     estimation_options = get_estimation_options()
@@ -205,7 +167,7 @@ def test_neighbours():
 
 def test_cross_corr_fit():
     v, w = 1, 1
-    ds = make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
+    ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     eo = get_estimation_options()
     eo.method = tde.TDEMethod.CCFit
     pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
