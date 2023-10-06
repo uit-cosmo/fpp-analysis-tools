@@ -36,7 +36,7 @@ def get_signal(x, y, ds):
         return ds.isel(x=x, y=y)["frames"].values
     # 2d code
     if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
+        return ds.isel(x=x, y=y)["n"].values
     raise "Unknown format"
 
 

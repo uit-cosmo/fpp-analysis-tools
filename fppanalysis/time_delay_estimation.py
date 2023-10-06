@@ -259,10 +259,13 @@ class ConditionalAvgOptions(TDEOptions):
 
 @dataclass
 class CCOptions(TDEOptions):
-    def __init__(self, interpolate: bool = False):
+    def __init__(self, cc_window: int = 100, interpolate: bool = False):
         """
+        - cc_window: int time lag window for the cross-correlation function computation.
+        If set to T, the cross-correlation function is computed for time lags [-T, T].
         - interpolate: If True the maximizing time lags are found by interpolation.
         """
+        self.cc_window = cc_window
         self.interpolate = interpolate
 
 
@@ -309,7 +312,7 @@ class TDEDelegator:
         return None
 
     def estimate_time_delay_uncached(self, p1, p0, ds):
-        extra_debug_info = "Between pixels {} and {}".format(p1, p0)
+        extra_debug_info = "between pixels {} and {}".format(p1, p0)
         x = utils.get_signal(p1[0], p1[1], ds)
         y = utils.get_signal(p0[0], p0[1], ds)
         dt = utils.get_dt(ds)
@@ -470,11 +473,7 @@ def estimate_time_delay_ccmax_running_mean(
 
     """
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
-    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
-    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
-    max_index = np.argmax(ccf)
-
-    find_window = np.abs(ccf_times - ccf_times[max_index]) < 50 * dt
+    find_window = np.abs(ccf_times) < options.cc_window
     ccf_times = ccf_times[find_window]
     ccf = ccf[find_window]
 
@@ -492,11 +491,7 @@ def estimate_time_delay_ccmax_running_mean(
     if not options.interpolate:
         return max_time, ccf_value, 0
 
-    interpolation_window = np.abs(ccf_times - max_time) < 20 * dt
-
-    max_time_interpolate = _find_maximum_interpolate(
-        ccf_times[interpolation_window], ccf[interpolation_window], extra_debug_info
-    )
+    max_time_interpolate = _find_maximum_interpolate(ccf_times, ccf, extra_debug_info)
 
     return max_time_interpolate, ccf_value, 0
 
@@ -567,7 +562,11 @@ def _run_mean_and_locate_maxima(ccf, max_run_window_size=7):
 def _count_local_maxima(ccf):
     local_maxima = np.array([False] * len(ccf))
     local_maxima[1:-1] = np.logical_and(ccf[1:-1] > ccf[2:], ccf[1:-1] > ccf[:-2])
-    return len(np.where(local_maxima)[0])
+
+    # Only count the local maxima that are at least half the value of the global maxima
+    args = ccf[np.where(local_maxima)[0]]
+    elegible_local_maxima = np.where(args > 0.5 * max(args))[0]
+    return len(elegible_local_maxima)
 
 
 def _find_maximum_interpolate(x, y, extra_debug_info):
