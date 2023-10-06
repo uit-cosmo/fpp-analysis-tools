@@ -15,6 +15,7 @@ class EstimationOptions:
         use_2d_estimation: bool = True,
         neighbors_ccf_min_lag: int = 0,
         num_cores: int = 1,
+        cache: bool = True,
         cc_options: tde.CCOptions = tde.CCOptions(),
         cond_av_options: tde.ConditionalAvgOptions = tde.ConditionalAvgOptions(),
         ccf_fit_options: tde.CCFitOptions = tde.CCFitOptions(),
@@ -30,6 +31,7 @@ class EstimationOptions:
         neighbor pixel is found complient to this condition. If set to -1, no condition will
         be applied.
         - num_cores: Number of cores to use.
+        - cache: bool, if True TDE results are cached
         = cond_av_eo: Conditional average estimation options to be used if method = "cond_av"
         - ccf_fit_eo: Time delay estimation options to be used if method = "cross_corr_fit"
         """
@@ -37,6 +39,7 @@ class EstimationOptions:
         self.use_2d_estimation = use_2d_estimation
         self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
         self.num_cores = num_cores
+        self.cache = cache
         self.cc_options = cc_options
         self.cond_av_eo = cond_av_options
         self.ccf_fit_eo = ccf_fit_options
@@ -98,7 +101,7 @@ class MovieData:
     def _set_pixel(self, items):
         i, j = items[0], items[1]
         try:
-            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options)
+            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options, self.tde_delegator)
         except:
             print(
                 "Issues estimating velocity for pixel",
@@ -114,8 +117,8 @@ class MovieData:
         self.z_dim = len(range_z)
         self.ds = ds
         self.estimation_options = estimation_options
-        self.time_delay_estimator = tde.TDEDelegator(
-            estimation_options.method, estimation_options.get_time_delay_options()
+        self.tde_delegator = tde.TDEDelegator(
+            estimation_options.method, estimation_options.get_time_delay_options(), estimation_options.cache
         )
         self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
@@ -351,7 +354,7 @@ def estimate_velocities_for_pixel(
 
     if tde_delegator is None:
         tde_delegator = tde.TDEDelegator(
-            estimation_options.method, estimation_options.get_time_delay_options()
+            estimation_options.method, estimation_options.get_time_delay_options(), estimation_options.cache
         )
 
     results = [

@@ -274,11 +274,38 @@ class TDEMethod(Enum):
 
 
 class TDEDelegator:
-    def __init__(self, method: TDEMethod, options):
+    def __init__(self, method: TDEMethod, options, cache):
         self.method = method
         self.options = options
+        self.cache = cache
+        self.results = {}
 
     def estimate_time_delay(self, p1, p0, ds):
+        if not self.cache:
+            return self.estimate_time_delay_uncached(p1, p0, ds)
+
+        saved = self._is_cached_or_reverse(p1, p0)
+        if saved is None:
+            new_result = self.estimate_time_delay_uncached(p1, p0, ds)
+            self.results[hash((p1, p0))] = new_result
+            return new_result
+        return saved
+
+    def _is_cached_or_reverse(self, p1, p0):
+        hash_direct = hash((p1, p0))
+        saved = self.results.get(hash_direct, None)
+        if saved is not None:
+            return saved
+
+        hash_reverse = hash((p0, p1))
+        saved = self.results.get(hash_reverse, 0)
+        if saved is not None:
+            return -saved
+
+        return None
+
+    def estimate_time_delay_uncached(self, p1, p0, ds):
+        print("Computing for {} and {}".format(p1, p0))
         extra_debug_info = "Between pixels {} and {}".format(p1, p0)
         x = utils.get_signal(p1[0], p1[1], ds)
         y = utils.get_signal(p0[0], p0[1], ds)
