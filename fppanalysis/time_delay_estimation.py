@@ -298,9 +298,10 @@ class TDEDelegator:
             return saved
 
         hash_reverse = hash((p0, p1))
-        saved = self.results.get(hash_reverse, 0)
+        saved = self.results.get(hash_reverse, None)
         if saved is not None:
-            return -saved
+            td, c, events = saved
+            return -td, c, events
 
         return None
 
