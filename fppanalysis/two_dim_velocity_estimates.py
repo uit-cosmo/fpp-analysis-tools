@@ -100,16 +100,19 @@ class MovieData:
 
     def _set_pixel(self, items):
         i, j = items[0], items[1]
-        try:
-            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options, self.tde_delegator)
-        except:
-            print(
-                "Issues estimating velocity for pixel",
-                i,
-                j,
-                "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-            )
-        return PixelData()
+        return estimate_velocities_for_pixel(
+            i, j, self.ds, self.estimation_options, self.tde_delegator
+        )
+        # try:
+        #    return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options, self.tde_delegator)
+        # except:
+        #    print(
+        #        "Issues estimating velocity for pixel",
+        #        i,
+        #        j,
+        #        "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+        #    )
+        # return PixelData()
 
     def __init__(self, ds, estimation_options: EstimationOptions):
         range_r, range_z = range(0, len(ds.x.values)), range(0, len(ds.y.values))
@@ -118,7 +121,9 @@ class MovieData:
         self.ds = ds
         self.estimation_options = estimation_options
         self.tde_delegator = tde.TDEDelegator(
-            estimation_options.method, estimation_options.get_time_delay_options(), estimation_options.cache
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
         )
         self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
@@ -354,7 +359,9 @@ def estimate_velocities_for_pixel(
 
     if tde_delegator is None:
         tde_delegator = tde.TDEDelegator(
-            estimation_options.method, estimation_options.get_time_delay_options(), estimation_options.cache
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
         )
 
     results = [

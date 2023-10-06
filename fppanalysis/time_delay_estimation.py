@@ -301,12 +301,14 @@ class TDEDelegator:
         saved = self.results.get(hash_reverse, None)
         if saved is not None:
             td, c, events = saved
+            # If we already attempted to compute the td without success td will be None
+            if td is None:
+                return saved
             return -td, c, events
 
         return None
 
     def estimate_time_delay_uncached(self, p1, p0, ds):
-        print("Computing for {} and {}".format(p1, p0))
         extra_debug_info = "Between pixels {} and {}".format(p1, p0)
         x = utils.get_signal(p1[0], p1[1], ds)
         y = utils.get_signal(p0[0], p0[1], ds)
