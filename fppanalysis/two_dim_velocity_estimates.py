@@ -8,13 +8,60 @@ from dataclasses import dataclass
 
 
 @dataclass
+class NeighbourOptions:
+    def __init__(
+        self, ccf_min_lag: int = -1, max_separation: int = 100, min_separation: int = 1
+    ):
+        """
+        Neighbour selection algorithm: For each reference pixel P0, four combinations of
+        neighbouring pixels are selected to estimate the velocity: (up, right), (up, left),
+        (down, right) and (down, left). For each combinations, the two neighbouring pixels
+        plus the reference pixel are used to estimate velocities. The resulting velocity
+        is estimated as the mean of all resulting velocities. If a given combination does not
+        lead to a velocity estimate (for example, the cross-correlation has no maximum) then
+        that combination will not contribute to the final mean. If the reference pixel is on
+        the boundary, only two combinations are available. If the reference pixel is on a corner
+        only one combination will be available.
+
+        In the default case, each neighbour pixel (up, down, right, left) is selected as the
+        nearest neighbour in that direction. This class contains options to further control
+        neighbour selection.
+
+        - ccf_min_lag: Integer, checks that the maximal correlation between adjacent
+        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
+        time. If that's not the case, the next neighbor will be used, and so on until a
+        neighbor pixel is found complient to this condition. If set to -1, no condition will
+        be applied. If set to 0, dead pixels will be hopped over.
+        - max_separation: Integer, maximum allowed separation between pixels. If some
+        condition is required (such as ccf_min_lag) and not fulfilled for pixels closer
+        or at than max_separation, then no neighbors will be used and the subset of pixels
+        under process will yield no estimate. The condition applies on a closed interval,
+        meaning that pixels separated exactly max_separation are allowed.
+        - min_separation: Integer, minimum allowed separation between pixels.
+        """
+        self.ccf_min_lag = ccf_min_lag
+        self.max_separation = max_separation
+        self.min_separation = min_separation
+
+    def __str__(self):
+        """
+        Return a string representation of the NeighbourOptions object.
+        """
+        return (
+            f"CCF Min Lag: {self.ccf_min_lag}, "
+            f"Max Separation: {self.max_separation}, "
+            f"Min Separation: {self.min_separation}"
+        )
+
+
+@dataclass
 class EstimationOptions:
     def __init__(
         self,
         method: tde.TDEMethod = tde.TDEMethod.CC,
         use_3point_method: bool = True,
-        neighbors_ccf_min_lag: int = 0,
         cache: bool = True,
+        neighbour_options: NeighbourOptions = NeighbourOptions(),
         cc_options: tde.CCOptions = tde.CCOptions(),
         ca_options: tde.CAOptions = tde.CAOptions(),
         ccf_options: tde.CCFitOptions = tde.CCFitOptions(),
@@ -24,20 +71,17 @@ class EstimationOptions:
 
         - method: fppanalysis.time_delay_estimation.TDEMethod Specifies the time delay method to be used.
         - use_3point_method: [bool] If False, use 2 point method to estimate velocities from time delays.
-        - neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
-        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
-        time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition. If set to -1, no condition will
-        be applied.
+
         - cache: bool, if True TDE results are cached
+        - neighbour_options: NeighbourOptions Options used for neighbour selection
         - cc_options: Cross correlation estimation options to be used if method = TDEMethod.CC
         - ca_options: Conditional average estimation options to be used if method = TDEMethod.CA
         - ccf_options: Time delay estimation options to be used if method = TDEMethod.CCFit
         """
         self.method = method
         self.use_3point_method = use_3point_method
-        self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
         self.cache = cache
+        self.neighbour_options = neighbour_options
         self.cc_options = cc_options
         self.ca_options = ca_options
         self.ccf_options = ccf_options
@@ -58,8 +102,8 @@ class EstimationOptions:
         return (
             f"Method: {self.method}, "
             f"Use 3-Point Method: {self.use_3point_method}, "
-            f"Neighbors CCF Min Lag: {self.neighbors_ccf_min_lag}, "
             f"Cache: {self.cache}, "
+            f"Neighbor Options: {self.neighbour_options}, "
             f"CC Options: {str(self.cc_options)}, "
             f"CA Options: {str(self.ca_options)}, "
             f"CCF Options: {str(self.ccf_options)}"
@@ -280,29 +324,32 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     return fulfills_constrain
 
 
-def _find_neighbors(x, y, ds: xr.Dataset, neighbors_ccf_min_lag: int):
+def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
+    start = neighbour_options.min_separation
+    end = neighbour_options.max_separation
+
     def should_hopp_pixel(p):
         # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
-        if neighbors_ccf_min_lag == -1:
+        if neighbour_options.ccf_min_lag == -1:
             return False
         return utils.is_within_boundaries(p, ds) and not _check_ccf_constrains(
-            (x, y), p, ds, neighbors_ccf_min_lag
+            (x, y), p, ds, neighbour_options.ccf_min_lag
         )
 
-    left = -1
-    while should_hopp_pixel((x + left, y)):
+    left = -start
+    while should_hopp_pixel((x + left, y)) and np.abs(left) < end:
         left -= 1
 
-    right = 1
-    while should_hopp_pixel((x + right, y)):
+    right = start
+    while should_hopp_pixel((x + right, y)) and np.abs(right) < end:
         right += 1
 
-    up = 1
-    while should_hopp_pixel((x, y + up)):
+    up = start
+    while should_hopp_pixel((x, y + up)) and np.abs(up) < end:
         up += 1
 
-    down = -1
-    while should_hopp_pixel((x, y + down)):
+    down = -start
+    while should_hopp_pixel((x, y + down)) and np.abs(down) < end:
         down -= 1
 
     return [(x + left, y), (x + right, y)], [(x, y + down), (x, y + up)]
@@ -350,7 +397,7 @@ def estimate_velocities_for_pixel(
         return PixelData(r_pos=r_pos, z_pos=z_pos)
 
     h_neighbors, v_neighbors = _find_neighbors(
-        x, y, ds, estimation_options.neighbors_ccf_min_lag
+        x, y, ds, estimation_options.neighbour_options
     )
 
     if tde_delegator is None:

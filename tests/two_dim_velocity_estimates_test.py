@@ -9,7 +9,6 @@ def get_estimation_options():
     return td.EstimationOptions(
         method=tde.TDEMethod.CC,
         use_3point_method=True,
-        neighbors_ccf_min_lag=0,
     )
 
 
@@ -128,7 +127,7 @@ def test_neighbours():
         v, w, np.array([5, 5.1, 5.2]), np.array([5, 5.1, 5.2]), dt=0.1
     )
     estimation_options = get_estimation_options()
-    estimation_options.neighbors_ccf_min_lag = 1
+    estimation_options.neighbour_options.ccf_min_lag = 1
     pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
     (
         v_est,
