@@ -10,7 +10,6 @@ from scipy.stats import uniform, norm
 from scipy.signal import fftconvolve
 from dataclasses import dataclass
 from enum import Enum
-from abc import ABC
 
 
 def get_average(params: np.ndarray, distribution: rv_continuous):
@@ -204,12 +203,8 @@ def estimate_delays(
     return avg, minimization.x
 
 
-class TDEOptions(ABC):
-    pass
-
-
 @dataclass
-class CCFitOptions(TDEOptions):
+class CCFitOptions:
     def __init__(
         self,
         fit_window=100,
@@ -237,7 +232,7 @@ class CCFitOptions(TDEOptions):
 
 
 @dataclass
-class CAOptions(TDEOptions):
+class CAOptions:
     def __init__(
         self,
         min_threshold: float = 2.5,
@@ -270,7 +265,7 @@ class CAOptions(TDEOptions):
 
 
 @dataclass
-class CCOptions(TDEOptions):
+class CCOptions:
     def __init__(
         self,
         cc_window: float = None,
