@@ -553,7 +553,8 @@ def get_time_delay_ccmax_rm_data(
     max_index = np.argmax(ccf_rm)
     max_time, max_ccf_value = ccf_times_rm[max_index], ccf_rm[max_index]
     if not options.interpolate:
-        return max_time, max_ccf_value, 0
+        print("You are getting four variables: max_time, max_ccf_value, ccf_times_rm, ccf_rm. Use them with care.")
+        return max_time, max_ccf_value, ccf_times_rm, ccf_rm
 
     max_time_interpolate, spline = _find_maximum_interpolate(
         ccf_times, ccf, extra_debug_info, return_spline=True
