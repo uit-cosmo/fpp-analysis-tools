@@ -511,7 +511,7 @@ def get_time_delay_ccmax_rm_data(
     x: np.ndarray,
     y: np.ndarray,
     dt: float,
-    interpolate: bool = False,
+    options: CCOptions = CCOptions(),
     extra_debug_info: str = "",
 ):
     """
@@ -526,37 +526,53 @@ def get_time_delay_ccmax_rm_data(
         max_ccf_value Max cross-correlation value
     """
     ccf_times, ccf = cf.corr_fun(x, y, dt=dt, biased=True, norm=True)
-    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
-    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
-    max_index = np.argmax(ccf)
 
-    find_window = np.abs(ccf_times - ccf_times[max_index]) < 50 * dt
+    # Cut ccf to the window of interest.
+    find_window = np.abs(ccf_times) < (
+        options.cc_window if options.cc_window is not None else 100 * dt
+    )
     ccf_times = ccf_times[find_window]
     ccf = ccf[find_window]
 
-    ccf_rm, n = _run_mean_and_locate_maxima(ccf, extra_debug_info)
+    if not options.running_mean:
+        max_index = np.argmax(ccf)
+        max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+        if not options.interpolate:
+            return max_time, ccf_value, 0
+
+        max_time_interpolate, spline = _find_maximum_interpolate(
+            ccf_times, ccf, extra_debug_info, return_spline=True
+        )
+
+        return max_time_interpolate, ccf_value, 0, spline
+
+    ccf_rm, n = _run_mean_and_locate_maxima(
+        ccf, max_run_window_size=options.window_max, extra_debug_info=extra_debug_info
+    )
     ccf_times_rm = ccf_times
     if ccf_rm is None:
-        return None
+        return None, None, None
     if n > 1:
         ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
 
-    # Maximum might have changed after running mean
     max_index = np.argmax(ccf_rm)
     max_time, max_ccf_value = ccf_times_rm[max_index], ccf_rm[max_index]
+    if not options.interpolate:
+        return max_time, max_ccf_value, 0
 
-    if not interpolate:
-        return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time, max_ccf_value
-
-    interpolation_window = np.abs(ccf_times_rm - max_time) < 20 * dt
-
-    max_time_interpolate = _find_maximum_interpolate(
-        ccf_times_rm[interpolation_window],
-        ccf_rm[interpolation_window],
-        extra_debug_info,
+    max_time_interpolate, spline = _find_maximum_interpolate(
+        ccf_times, ccf, extra_debug_info, return_spline=True
     )
 
-    return ccf_times, ccf, ccf_times_rm, ccf_rm, max_time_interpolate, max_ccf_value
+    return (
+        ccf_times,
+        ccf,
+        ccf_times_rm,
+        ccf_rm,
+        max_time_interpolate,
+        max_ccf_value,
+        spline,
+    )
 
 
 def _run_mean_and_locate_maxima(ccf, max_run_window_size=7, extra_debug_info=""):
@@ -591,7 +607,7 @@ def _count_local_maxima(ccf):
     return len(elegible_local_maxima)
 
 
-def _find_maximum_interpolate(x, y, extra_debug_info):
+def _find_maximum_interpolate(x, y, extra_debug_info, return_spline=False):
     from scipy.interpolate import InterpolatedUnivariateSpline
 
     # Taking the derivative and finding the roots only work if the spline degree is at least 4.
@@ -602,13 +618,16 @@ def _find_maximum_interpolate(x, y, extra_debug_info):
     )  # also check the endpoints of the interval
     values = spline(possible_maxima)
 
-    max_index = np.argmax(values)
-    if possible_maxima[max_index] == x[0] or possible_maxima[max_index] == x[-1]:
+    maxi = np.max(values)
+    if maxi == x[0] or maxi == x[-1]:
         warnings.warn(
             "Maximization on interpolation yielded a maximum in the boundary!"
             + extra_debug_info
         )
-    return possible_maxima[max_index]
+
+    if return_spline:
+        return maxi, spline
+    return maxi
 
 
 def estimate_time_delay_ccond_av_max(
