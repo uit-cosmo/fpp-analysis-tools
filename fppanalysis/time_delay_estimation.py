@@ -595,11 +595,11 @@ def _run_mean_and_locate_maxima(ccf, max_run_window_size=7, extra_debug_info="")
             )
             return False, ccf_mean, n
 
-        n = n + 2
-        if n > max_run_window_size:
+        if n + 2 > max_run_window_size:
             warnings.warn("Maximum running window achieved " + extra_debug_info)
             return False, ccf_mean, n
 
+        n = n + 2
         ccf_mean = np.convolve(ccf, np.ones(n) / n, mode="valid")
     return True, ccf_mean, n
 
