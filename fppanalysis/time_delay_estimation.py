@@ -562,7 +562,7 @@ def get_time_delay_ccmax_rm_data(
     if n > 1:
         ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
     if not success:
-        return max_time, max_ccf_value, ccf_times_rm, ccf_times
+        return max_time, max_ccf_value, ccf_times_rm, ccf_rm
 
     if not options.interpolate:
         print(
