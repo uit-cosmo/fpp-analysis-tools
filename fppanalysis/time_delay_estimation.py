@@ -484,10 +484,10 @@ def estimate_time_delay_ccf(
 
         return max_time_interpolate, ccf_value, 0
 
-    ccf, n = _run_mean_and_locate_maxima(
+    success, ccf, n = _run_mean_and_locate_maxima(
         ccf, max_run_window_size=options.window_max, extra_debug_info=extra_debug_info
     )
-    if ccf is None:
+    if not success:
         return None, None, None
     if n > 1:
         ccf_times = ccf_times[int(n / 2) : -int(n / 2)]
@@ -507,10 +507,21 @@ def get_time_delay_ccmax_rm_data(
     y: np.ndarray,
     dt: float,
     options: CCOptions = CCOptions(),
-    extra_debug_info: str = "",
 ):
     """
     Returns all data relevant for the method estimate_time_delay_ccmax_running_mean.
+
+    if options.running_mean = False, and interpolate = False, return max_time, ccf_value,
+    ccf_times, ccf
+
+    if options.running_mean = False, and interpolate = True, return max_time_interpolate,
+    ccf_value, ccf_times, spline
+
+    if options.running_mean = True, and interpolate = False (or if interpolate = True, but
+    running_mean does not succeed) return max_time, max_ccf_value, ccf_times_rm, ccf_rm
+
+    if options.running_mean = False, and interpolate = False, return ccf_times, ccf, ccf_times_rm,
+    ccf_rm, max_time_interpolate, max_ccf_value, spline
 
     Returns:
         ccf_times Times for ccf array without running mean
@@ -533,31 +544,34 @@ def get_time_delay_ccmax_rm_data(
         max_index = np.argmax(ccf)
         max_time, ccf_value = ccf_times[max_index], ccf[max_index]
         if not options.interpolate:
-            return max_time, ccf_value, 0
+            return max_time, ccf_value, ccf_times, ccf
 
         max_time_interpolate, spline = _find_maximum_interpolate(
-            ccf_times, ccf, extra_debug_info, return_spline=True
+            ccf_times, ccf, return_spline=True
         )
 
-        return max_time_interpolate, ccf_value, 0, spline
+        return max_time_interpolate, ccf_value, ccf_times, spline
 
-    ccf_rm, n = _run_mean_and_locate_maxima(
-        ccf, max_run_window_size=options.window_max, extra_debug_info=extra_debug_info
+    success, ccf_rm, n = _run_mean_and_locate_maxima(
+        ccf, max_run_window_size=options.window_max
     )
     ccf_times_rm = ccf_times
-    if ccf_rm is None:
-        return None, None, None
-    if n > 1:
-        ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
 
     max_index = np.argmax(ccf_rm)
     max_time, max_ccf_value = ccf_times_rm[max_index], ccf_rm[max_index]
+    if n > 1:
+        ccf_times_rm = ccf_times[int(n / 2) : -int(n / 2)]
+    if not success:
+        return max_time, max_ccf_value, ccf_times_rm, ccf_times
+
     if not options.interpolate:
-        print("You are getting four variables: max_time, max_ccf_value, ccf_times_rm, ccf_rm. Use them with care.")
+        print(
+            "You are getting four variables: max_time, max_ccf_value, ccf_times_rm, ccf_rm. Use them with care."
+        )
         return max_time, max_ccf_value, ccf_times_rm, ccf_rm
 
     max_time_interpolate, spline = _find_maximum_interpolate(
-        ccf_times, ccf, extra_debug_info, return_spline=True
+        ccf_times, ccf, return_spline=True
     )
 
     return (
@@ -579,15 +593,15 @@ def _run_mean_and_locate_maxima(ccf, max_run_window_size=7, extra_debug_info="")
             warnings.warn(
                 "Cross-correlation function has no local maxima. " + extra_debug_info
             )
-            return None, n
+            return False, ccf_mean, n
 
         n = n + 2
         if n > max_run_window_size:
             warnings.warn("Maximum running window achieved " + extra_debug_info)
-            return None, n
+            return False, ccf_mean, n
 
         ccf_mean = np.convolve(ccf, np.ones(n) / n, mode="valid")
-    return ccf_mean, n
+    return True, ccf_mean, n
 
 
 def _count_local_maxima(ccf):
