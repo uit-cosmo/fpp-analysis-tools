@@ -628,16 +628,17 @@ def _find_maximum_interpolate(x, y, extra_debug_info, return_spline=False):
     )  # also check the endpoints of the interval
     values = spline(possible_maxima)
 
-    maxi = np.max(values)
-    if maxi == x[0] or maxi == x[-1]:
+    max_index = np.argmax(values)
+    max_time = possible_maxima[max_index]
+    if max_time == x[0] or max_time == x[-1]:
         warnings.warn(
             "Maximization on interpolation yielded a maximum in the boundary!"
             + extra_debug_info
         )
 
     if return_spline:
-        return maxi, spline
-    return maxi
+        return max_time, spline
+    return max_time
 
 
 def estimate_time_delay_ccond_av_max(

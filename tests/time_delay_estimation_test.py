@@ -43,5 +43,5 @@ def test_local_maxima_only_if_big_enough():
 
 def test_no_result_if_no_local_maxima():
     x = np.array([0, 1, 2, 4, 6])
-    res, _ = tde._run_mean_and_locate_maxima(x)
-    assert res is None
+    success, _, _ = tde._run_mean_and_locate_maxima(x)
+    assert not success
