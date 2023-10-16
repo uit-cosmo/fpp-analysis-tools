@@ -269,6 +269,7 @@ class CCOptions:
     def __init__(
         self,
         cc_window: float = None,
+        minimum_cc_value: float = 0.5,
         running_mean: bool = True,
         running_mean_window_max: int = 7,
         interpolate: bool = False,
@@ -277,6 +278,8 @@ class CCOptions:
         - cc_window: int time lag window for the cross-correlation function computation.
         If set to T, the cross-correlation function is computed for time lags [-T, T]. If set to None,
         100 sampling times will be used as default
+        - minimum_cc_value: float The cross-correlation maximum has to be at least this value, if less
+        no estimate is performed.
         - running_mean: bool, if True, a running mean is applied to the estimated cross-correlation.
         The length of the running mean is determined as the minimum length such that the
         resulting cross-correlation has only one local maximum up to a factor 2. If the running mean
@@ -286,6 +289,7 @@ class CCOptions:
         - interpolate: If True the maximizing time lags are found by interpolation.
         """
         self.cc_window = cc_window
+        self.minimum_cc_value = minimum_cc_value
         self.running_mean = running_mean
         self.window_max = running_mean_window_max
         self.interpolate = interpolate
@@ -472,9 +476,15 @@ def estimate_time_delay_ccf(
     ccf_times = ccf_times[find_window]
     ccf = ccf[find_window]
 
+    max_index = np.argmax(ccf)
+    max_time, ccf_value = ccf_times[max_index], ccf[max_index]
+    if ccf_value < options.minimum_cc_value:
+        warnings.warn(
+            "CCF value too low to perform time delay estimation " + extra_debug_info
+        )
+        return None, None, None
+
     if not options.running_mean:
-        max_index = np.argmax(ccf)
-        max_time, ccf_value = ccf_times[max_index], ccf[max_index]
         if not options.interpolate:
             return max_time, ccf_value, 0
 
