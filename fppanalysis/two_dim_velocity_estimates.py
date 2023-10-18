@@ -1,51 +1,113 @@
 import warnings
 
 import fppanalysis.time_delay_estimation as tde
+from fppanalysis import utils
 import numpy as np
 import xarray as xr
 from dataclasses import dataclass
 
 
 @dataclass
+class NeighbourOptions:
+    def __init__(
+        self, ccf_min_lag: int = -1, max_separation: int = 100, min_separation: int = 1
+    ):
+        """
+        Neighbour selection algorithm: For each reference pixel P0, four combinations of
+        neighbouring pixels are selected to estimate the velocity: (up, right), (up, left),
+        (down, right) and (down, left). For each combinations, the two neighbouring pixels
+        plus the reference pixel are used to estimate velocities. The resulting velocity
+        is estimated as the mean of all resulting velocities. If a given combination does not
+        lead to a velocity estimate (for example, the cross-correlation has no maximum) then
+        that combination will not contribute to the final mean. If the reference pixel is on
+        the boundary, only two combinations are available. If the reference pixel is on a corner
+        only one combination will be available.
+
+        In the default case, each neighbour pixel (up, down, right, left) is selected as the
+        nearest neighbour in that direction. This class contains options to further control
+        neighbour selection.
+
+        - ccf_min_lag: Integer, checks that the maximal correlation between adjacent
+        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
+        time. If that's not the case, the next neighbor will be used, and so on until a
+        neighbor pixel is found complient to this condition. If set to -1, no condition will
+        be applied. If set to 0, dead pixels will be hopped over.
+        - max_separation: Integer, maximum allowed separation between pixels. If some
+        condition is required (such as ccf_min_lag) and not fulfilled for pixels closer
+        or at than max_separation, then no neighbors will be used and the subset of pixels
+        under process will yield no estimate. The condition applies on a closed interval,
+        meaning that pixels separated exactly max_separation are allowed.
+        - min_separation: Integer, minimum allowed separation between pixels.
+        """
+        self.ccf_min_lag = ccf_min_lag
+        self.max_separation = max_separation
+        self.min_separation = min_separation
+
+    def __str__(self):
+        """
+        Return a string representation of the NeighbourOptions object.
+        """
+        return (
+            f"CCF Min Lag: {self.ccf_min_lag}, "
+            f"Max Separation: {self.max_separation}, "
+            f"Min Separation: {self.min_separation}"
+        )
+
+
+@dataclass
 class EstimationOptions:
     def __init__(
         self,
-        method: str = "cross_corr",
-        use_2d_estimation: bool = True,
-        neighbors_ccf_min_lag: int = 0,
-        interpolate: bool = True,
-        num_cores: int = 1,
-        min_threshold: float = 2.5,
-        max_threshold: float = np.inf,
-        delta: float = None,
-        window: bool = False,
+        method: tde.TDEMethod = tde.TDEMethod.CC,
+        use_3point_method: bool = True,
+        cache: bool = True,
+        neighbour_options: NeighbourOptions = NeighbourOptions(),
+        cc_options: tde.CCOptions = tde.CCOptions(),
+        ca_options: tde.CAOptions = tde.CAOptions(),
+        ccf_options: tde.CCFitOptions = tde.CCFitOptions(),
     ):
         """
         Estimation options for velocity estimation method.
 
-        - method: 'cross_corr' or 'cond_av'
-        - use_2d_estimation: [bool] If False, use 1 dimensional method to estimate velocities.
-        - neighbors_ccf_min_lag: Integer, checks that the maximal correlation between adjacent
-        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
-        time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition. If set to -1, no condition will
-        be applied.
-        - interpolate: If True the maximizing time lags are found by interpolation.
-        - num_cores: Number of cores to use.
-        - min_threshold: Used only if method = "cond_av". min threshold for conditional averaged events
-        - max_threshold: Used only if method = "cond_av". max threshold for conditional averaged events
-        - delta: Used only if method = "cond_av". If window = True, delta is the minimal distance between two peaks.
-        - window: Used only if method = "cond_av". [bool] If True, delta also gives the minimal distance between peaks.
+        - method: fppanalysis.time_delay_estimation.TDEMethod Specifies the time delay method to be used.
+        - use_3point_method: [bool] If False, use 2 point method to estimate velocities from time delays.
+
+        - cache: bool, if True TDE results are cached
+        - neighbour_options: NeighbourOptions Options used for neighbour selection
+        - cc_options: Cross correlation estimation options to be used if method = TDEMethod.CC
+        - ca_options: Conditional average estimation options to be used if method = TDEMethod.CA
+        - ccf_options: Time delay estimation options to be used if method = TDEMethod.CCFit
         """
         self.method = method
-        self.use_2d_estimation = use_2d_estimation
-        self.neighbors_ccf_min_lag = neighbors_ccf_min_lag
-        self.interpolate = interpolate
-        self.num_cores = num_cores
-        self.min_threshold = min_threshold
-        self.max_threshold = max_threshold
-        self.delta = delta
-        self.window = window
+        self.use_3point_method = use_3point_method
+        self.cache = cache
+        self.neighbour_options = neighbour_options
+        self.cc_options = cc_options
+        self.ca_options = ca_options
+        self.ccf_options = ccf_options
+
+    def get_time_delay_options(self):
+        match self.method:
+            case tde.TDEMethod.CC:
+                return self.cc_options
+            case tde.TDEMethod.CA:
+                return self.ca_options
+            case tde.TDEMethod.CCFit:
+                return self.ccf_options
+
+    def __str__(self):
+        """
+        Return a string representation of the EstimationOptions object.
+        """
+        return (
+            f"Method: {self.method}, "
+            f"Use 3-Point Method: {self.use_3point_method}, "
+            f"Cache: {self.cache}, "
+            f"Neighbor Options: {self.neighbour_options}, "
+            f"CC Options: {str(self.cc_options)}, "
+            f"CA Options: {str(self.ca_options)}, "
+            f"CCF Options: {str(self.ccf_options)}"
+        )
 
 
 @dataclass
@@ -96,15 +158,16 @@ class MovieData:
         self.z_dim = len(range_z)
         self.ds = ds
         self.estimation_options = estimation_options
-        self.pixels = [[PixelData() for _ in range_z] for _ in range_r]
+        self.tde_delegator = tde.TDEDelegator(
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
+        )
+        self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
-        from pathos.multiprocessing import ProcessPool
-
-        pool = ProcessPool(estimation_options.num_cores)
-        results = pool.map(self._set_pixel, [(i, j) for i in range_r for j in range_z])
-        for i in range_r:
-            for j in range_z:
-                self.pixels[i][j] = results[len(range_r) * j + i]
+        for i in range_z:
+            for j in range_r:
+                self.pixels[i][j] = self._set_pixel((j, i))
 
     def _set_pixel(self, items):
         i, j = items[0], items[1]
@@ -115,7 +178,7 @@ class MovieData:
                 "Issues estimating velocity for pixel",
                 i,
                 j,
-                "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
+                "Run estimate_velocities_for_pixel(i, j, ds, eo) to get a detailed error stacktrace",
             )
         return PixelData()
 
@@ -190,128 +253,29 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
     return vx, vy
 
 
-def _get_rz(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.x.isel(x=x).values, ds.y.isel(y=y).values
-    raise "Unknown format"
-
-
-def _get_rz_full(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        shape = (len(ds.x.values), len(ds.y.values))
-        R = np.zeros(shape=shape)
-        Z = np.zeros(shape=shape)
-        for x in ds.x.values:
-            for y in ds.y.values:
-                R[x, y] = ds.R.isel(x=x, y=y).values
-                Z[x, y] = ds.Z.isel(x=x, y=y).values
-        return R, Z
-    # 2d code
-    if hasattr(ds, "t"):
-        return np.meshgrid(ds.x.values, ds.y.values)
-    raise "Unknown format"
-
-
-def _get_signal(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
-    raise "Unknown format"
-
-
-def _get_dt(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        times = ds["time"]
-        return times[1].values - times[0].values
-    # 2d code
-    if hasattr(ds, "t"):
-        times = ds["t"]
-        return times[1].values - times[0].values
-    raise "Unknown format"
-
-
-def _get_time(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).time.values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.t.values
-    raise "Unknown format"
-
-
-def _estimate_time_delay(
-    x: np.ndarray,
-    x_t: np.ndarray,
-    y: np.ndarray,
-    dt: float,
-    estimation_options: EstimationOptions,
-):
-    match estimation_options.method:
-        case "cross_corr":
-            (delta_t, c), events = (
-                tde.estimate_time_delay_ccmax(
-                    x=x, y=y, dt=dt, interpolate=estimation_options.interpolate
-                ),
-                0,
-            )
-        case "cond_av":
-            delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
-                x=x,
-                x_t=x_t,
-                y=y,
-                min_threshold=estimation_options.min_threshold,
-                max_threshold=estimation_options.max_threshold,
-                delta=estimation_options.delta,
-                window=estimation_options.window,
-                interpolate=estimation_options.interpolate,
-            )
-        case _:
-            raise Exception("Method must be either cross_corr or cond_av")
-    return delta_t, c, events
-
-
 def _estimate_velocities_given_points(
-    p0, p1, p2, ds, estimation_options: EstimationOptions
+    p0, p1, p2, ds, tde_delegator: tde.TDEDelegator, use_2d_estimation: bool
 ):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
     This is specified in method argument.
     """
-    dt = _get_dt(ds)
-    r0, z0 = _get_rz(p0[0], p0[1], ds)
-    r1, z1 = _get_rz(p1[0], p1[1], ds)
-    r2, z2 = _get_rz(p2[0], p2[1], ds)
-    signal0 = _get_signal(p0[0], p0[1], ds)
-    signal1 = _get_signal(p1[0], p1[1], ds)
-    signal2 = _get_signal(p2[0], p2[1], ds)
-    time1 = _get_time(p1[0], p1[1], ds)
-    time2 = _get_time(p2[0], p2[1], ds)
+    delta_ty, cy, events_y = tde_delegator.estimate_time_delay(p2, p0, ds)
+    delta_tx, cx, events_x = tde_delegator.estimate_time_delay(p1, p0, ds)
 
-    if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
+    # If for some reason the time delay cannot be estimated, we return None
+    if delta_tx is None or delta_ty is None:
         return None
-
-    delta_ty, cy, events_y = _estimate_time_delay(
-        x=signal2, x_t=time2, y=signal0, dt=dt, estimation_options=estimation_options
-    )
-    delta_tx, cx, events_x = _estimate_time_delay(
-        x=signal1, x_t=time1, y=signal0, dt=dt, estimation_options=estimation_options
-    )
 
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    if estimation_options.use_2d_estimation:
+    r0, z0 = utils.get_rz(p0[0], p0[1], ds)
+    r1, z1 = utils.get_rz(p1[0], p1[1], ds)
+    r2, z2 = utils.get_rz(p2[0], p2[1], ds)
+
+    if use_2d_estimation:
         return (
             *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
             confidence,
@@ -325,29 +289,24 @@ def _estimate_velocities_given_points(
         )
 
 
-def _is_within_boundaries(p, ds):
-    return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
-
-
 def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     """Returns true if the time lag that maximizes the cross-correlation
     function measure at p0 and p1 is not zero
     """
     import fppanalysis.correlation_function as cf
 
-    signal0 = _get_signal(p0[0], p0[1], ds)
-    signal1 = _get_signal(p1[0], p1[1], ds)
+    signal0 = utils.get_signal(p0[0], p0[1], ds)
+    signal1 = utils.get_signal(p1[0], p1[1], ds)
 
-    if len(signal1) == 0:
-        warnings.warn(
-            "Pixel {} is dead and cannot be used as a neighbor pixel of {}. Updating.".format(
-                p1, p0
-            )
-        )
+    if utils.is_pixel_dead(signal1):
         return False
 
+    # No need to compute the ccf if the min lag is 0
+    if neighbors_ccf_min_lag == 0:
+        return True
+
     ccf_times, ccf = cf.corr_fun(
-        signal0, signal1, dt=_get_dt(ds), biased=True, norm=True
+        signal0, signal1, dt=utils.get_dt(ds), biased=True, norm=True
     )
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
@@ -355,7 +314,7 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
 
     fulfills_constrain = np.abs(
         ccf_times[max_index]
-    ) >= neighbors_ccf_min_lag * _get_dt(ds)
+    ) >= neighbors_ccf_min_lag * utils.get_dt(ds)
     if not fulfills_constrain:
         warnings.warn(
             "Pixel {} does not fulfill cross-correlation time lag condition with respect to pixel of {}."
@@ -365,36 +324,43 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     return fulfills_constrain
 
 
-def _find_neighbors(x, y, ds: xr.Dataset, neighbors_ccf_min_lag: int):
+def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
+    start = neighbour_options.min_separation
+    end = neighbour_options.max_separation
+
     def should_hopp_pixel(p):
         # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
-        if neighbors_ccf_min_lag == -1:
+        if neighbour_options.ccf_min_lag == -1:
             return False
-        return _is_within_boundaries(p, ds) and not _check_ccf_constrains(
-            (x, y), p, ds, neighbors_ccf_min_lag
+        return utils.is_within_boundaries(p, ds) and not _check_ccf_constrains(
+            (x, y), p, ds, neighbour_options.ccf_min_lag
         )
 
-    left = -1
-    while should_hopp_pixel((x + left, y)):
+    left = -start
+    while should_hopp_pixel((x + left, y)) and np.abs(left) < end:
         left -= 1
 
-    right = 1
-    while should_hopp_pixel((x + right, y)):
+    right = start
+    while should_hopp_pixel((x + right, y)) and np.abs(right) < end:
         right += 1
 
-    up = 1
-    while should_hopp_pixel((x, y + up)):
+    up = start
+    while should_hopp_pixel((x, y + up)) and np.abs(up) < end:
         up += 1
 
-    down = -1
-    while should_hopp_pixel((x, y + down)):
+    down = -start
+    while should_hopp_pixel((x, y + down)) and np.abs(down) < end:
         down -= 1
 
     return [(x + left, y), (x + right, y)], [(x, y + down), (x, y + up)]
 
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, estimation_options: EstimationOptions = EstimationOptions()
+    x,
+    y,
+    ds: xr.Dataset,
+    estimation_options: EstimationOptions = EstimationOptions(),
+    tde_delegator: tde.TDEDelegator = None,
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -424,21 +390,31 @@ def estimate_velocities_for_pixel(
     Returns:
         PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
-    r_pos, z_pos = _get_rz(x, y, ds)
+    r_pos, z_pos = utils.get_rz(x, y, ds)
 
     # If the reference pixel is dead, return empty data right away
-    if len(_get_signal(x, y, ds)) == 0:
+    if utils.is_pixel_dead(utils.get_signal(x, y, ds)):
         return PixelData(r_pos=r_pos, z_pos=z_pos)
 
     h_neighbors, v_neighbors = _find_neighbors(
-        x, y, ds, estimation_options.neighbors_ccf_min_lag
+        x, y, ds, estimation_options.neighbour_options
     )
+
+    if tde_delegator is None:
+        tde_delegator = tde.TDEDelegator(
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
+        )
+
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, estimation_options)
+        _estimate_velocities_given_points(
+            (x, y), px, py, ds, tde_delegator, estimation_options.use_3point_method
+        )
         for px in h_neighbors
-        if _is_within_boundaries(px, ds)
+        if utils.is_within_boundaries(px, ds)
         for py in v_neighbors
-        if _is_within_boundaries(py, ds)
+        if utils.is_within_boundaries(py, ds)
     ]
 
     results = [r for r in results if r is not None]
