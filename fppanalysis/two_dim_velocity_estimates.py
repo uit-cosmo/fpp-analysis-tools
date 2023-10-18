@@ -336,31 +336,44 @@ def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
     start = neighbour_options.min_separation
     end = neighbour_options.max_separation
 
+    def fulfills_conditions(p):
+        return utils.is_within_boundaries(p, ds) and _check_ccf_constrains(
+            (x, y), p, ds, neighbour_options.ccf_min_lag
+        )
+
     def should_hopp_pixel(p):
         # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
         if neighbour_options.ccf_min_lag == -1:
             return False
-        return utils.is_within_boundaries(p, ds) and not _check_ccf_constrains(
-            (x, y), p, ds, neighbour_options.ccf_min_lag
-        )
+        return not fulfills_conditions(p)
 
+    horizontal = []
+    vertical = []
     left = -start
     while should_hopp_pixel((x + left, y)) and np.abs(left) < end:
         left -= 1
+    if fulfills_conditions((x + left, y)):
+        horizontal.append((x + left, y))
 
     right = start
     while should_hopp_pixel((x + right, y)) and np.abs(right) < end:
         right += 1
+    if fulfills_conditions((x + right, y)):
+        horizontal.append((x + right, y))
 
     up = start
     while should_hopp_pixel((x, y + up)) and np.abs(up) < end:
         up += 1
+    if fulfills_conditions((x, y + up)):
+        vertical.append((x, y + up))
 
     down = -start
     while should_hopp_pixel((x, y + down)) and np.abs(down) < end:
         down -= 1
+    if fulfills_conditions((x, y + down)):
+        vertical.append((x, y + down))
 
-    return [(x + left, y), (x + right, y)], [(x, y + down), (x, y + up)]
+    return horizontal, vertical
 
 
 def estimate_velocities_for_pixel(
