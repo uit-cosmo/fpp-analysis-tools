@@ -123,14 +123,16 @@ class PixelData:
             Conditional variance value at maximum cross conditional average for each pixel.
     R: Radial positions
     Z: Poloidal positions
+    is_dead: True if pixel is dead
     """
 
     r_pos: float = 0
     z_pos: float = 0
-    vx: float = 0
-    vy: float = 0
+    vx: float = np.nan
+    vy: float = np.nan
     confidence: float = 0
     events: int = 0
+    is_dead: bool = False
 
 
 class MovieData:
@@ -148,6 +150,7 @@ class MovieData:
                 Conditional variance value at maximum cross conditional average for each pixel.
         R: Radial positions
         Z: Poloidal positions
+        is_dead: True if pixel is dead
 
     Dead pixels have empty PixelData (null vx and vy).
     """
@@ -172,7 +175,9 @@ class MovieData:
     def _set_pixel(self, items):
         i, j = items[0], items[1]
         try:
-            return estimate_velocities_for_pixel(i, j, self.ds, self.estimation_options)
+            return estimate_velocities_for_pixel(
+                i, j, self.ds, self.estimation_options, self.tde_delegator
+            )
         except:
             print(
                 "Issues estimating velocity for pixel",
@@ -204,6 +209,9 @@ class MovieData:
 
     def get_confidences(self):
         return self._get_field("confidence")
+
+    def get_is_dead(self):
+        return self._get_field("is_dead")
 
 
 def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
@@ -394,7 +402,7 @@ def estimate_velocities_for_pixel(
 
     # If the reference pixel is dead, return empty data right away
     if utils.is_pixel_dead(utils.get_signal(x, y, ds)):
-        return PixelData(r_pos=r_pos, z_pos=z_pos)
+        return PixelData(r_pos=r_pos, z_pos=z_pos, is_dead=True)
 
     h_neighbors, v_neighbors = _find_neighbors(
         x, y, ds, estimation_options.neighbour_options
