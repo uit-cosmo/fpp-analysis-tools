@@ -1,5 +1,4 @@
 import numpy as np
-import xarray as xr
 
 
 def get_rz(x, y, ds):
