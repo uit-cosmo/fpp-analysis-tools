@@ -30,14 +30,16 @@ class NeighbourOptions:
         - ccf_min_lag: Integer, checks that the maximal correlation between adjacent
         pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition. If set to 0, it only checks that
+        neighbor pixel is found compliant to this condition. If set to 0, it only checks that
         the pixel is not dead.
         - min_separation: Integer, minimum allowed separation between pixels.
         - max_separation: Integer, maximum allowed separation between pixels. If some
         condition is required (such as ccf_min_lag) and not fulfilled for pixels closer
         or at than max_separation, then no neighbors will be used and the subset of pixels
         under process will yield no estimate. The condition applies on a closed interval,
-        meaning that pixels separated exactly max_separation are allowed.
+        meaning that pixels separated exactly max_separation are allowed, thus setting
+        min_separation = max_separation guarantees that the neighbour pixels will be separated
+        by that distance.
         """
         self.ccf_min_lag = ccf_min_lag
         self.min_separation = min_separation
