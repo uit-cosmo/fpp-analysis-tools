@@ -128,6 +128,7 @@ def test_neighbours():
     )
     estimation_options = get_estimation_options()
     estimation_options.neighbour_options.ccf_min_lag = 1
+    estimation_options.neighbour_options.max_separation = 3
     pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
     (
         v_est,

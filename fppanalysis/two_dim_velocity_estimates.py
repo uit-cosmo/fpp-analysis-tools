@@ -10,7 +10,7 @@ from dataclasses import dataclass
 @dataclass
 class NeighbourOptions:
     def __init__(
-        self, ccf_min_lag: int = -1, max_separation: int = 100, min_separation: int = 1
+        self, ccf_min_lag: int = -1, min_separation: int = 1, max_separation: int = 1
     ):
         """
         Neighbour selection algorithm: For each reference pixel P0, four combinations of
@@ -30,18 +30,18 @@ class NeighbourOptions:
         - ccf_min_lag: Integer, checks that the maximal correlation between adjacent
         pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
         time. If that's not the case, the next neighbor will be used, and so on until a
-        neighbor pixel is found complient to this condition. If set to -1, no condition will
-        be applied. If set to 0, dead pixels will be hopped over.
+        neighbor pixel is found complient to this condition. If set to 0, it only checks that
+        the pixel is not dead.
+        - min_separation: Integer, minimum allowed separation between pixels.
         - max_separation: Integer, maximum allowed separation between pixels. If some
         condition is required (such as ccf_min_lag) and not fulfilled for pixels closer
         or at than max_separation, then no neighbors will be used and the subset of pixels
         under process will yield no estimate. The condition applies on a closed interval,
         meaning that pixels separated exactly max_separation are allowed.
-        - min_separation: Integer, minimum allowed separation between pixels.
         """
         self.ccf_min_lag = ccf_min_lag
-        self.max_separation = max_separation
         self.min_separation = min_separation
+        self.max_separation = max_separation
 
     def __str__(self):
         """
@@ -341,37 +341,32 @@ def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
             (x, y), p, ds, neighbour_options.ccf_min_lag
         )
 
-    def should_hopp_pixel(p):
-        # if neighbors_ccf_min_lag is set to -1, we don't hopp (see docs).
-        if neighbour_options.ccf_min_lag == -1:
-            return False
-        return not fulfills_conditions(p)
-
     horizontal = []
     vertical = []
+
     left = -start
-    while should_hopp_pixel((x + left, y)) and np.abs(left) < end:
+    while np.abs(left) <= end:
+        if fulfills_conditions((x + left, y)):
+            horizontal.append((x + left, y))
         left -= 1
-    if fulfills_conditions((x + left, y)):
-        horizontal.append((x + left, y))
 
     right = start
-    while should_hopp_pixel((x + right, y)) and np.abs(right) < end:
+    while np.abs(right) <= end:
+        if fulfills_conditions((x + right, y)):
+            horizontal.append((x + right, y))
         right += 1
-    if fulfills_conditions((x + right, y)):
-        horizontal.append((x + right, y))
 
     up = start
-    while should_hopp_pixel((x, y + up)) and np.abs(up) < end:
+    while np.abs(up) <= end:
+        if fulfills_conditions((x, y + up)):
+            vertical.append((x, y + up))
         up += 1
-    if fulfills_conditions((x, y + up)):
-        vertical.append((x, y + up))
 
     down = -start
-    while should_hopp_pixel((x, y + down)) and np.abs(down) < end:
+    while np.abs(down) <= end:
+        if fulfills_conditions((x, y + down)):
+            vertical.append((x, y + down))
         down -= 1
-    if fulfills_conditions((x, y + down)):
-        vertical.append((x, y + down))
 
     return horizontal, vertical
 
