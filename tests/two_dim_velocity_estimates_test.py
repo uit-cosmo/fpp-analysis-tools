@@ -156,3 +156,71 @@ def test_cross_corr_fit():
     )
     error = np.max([abs(v_est - v), abs(w_est - w)])
     assert error < 0.1, "Numerical error too big"
+
+
+def test_non_orthogonal_points():
+    from blobmodel import Model, DefaultBlobFactory
+
+    T = 1000
+    K = 1000
+    Lx = 10
+    Ly = 10
+    taup = 1e10
+    dt = 0.01
+
+    vx, vy = 1, 1
+
+    bf = DefaultBlobFactory(
+        A_dist="deg",
+        vx_dist="deg",
+        vy_dist="deg",
+        vy_parameter=vy,
+        vx_parameter=vx,
+    )
+    bm = Model(
+        Nx=10,
+        Ny=1,
+        Lx=Lx,
+        Ly=Ly,
+        dt=dt,
+        T=T,
+        num_blobs=K,
+        blob_shape="gauss",
+        periodic_y=True,
+        t_drain=taup,
+        blob_factory=bf,
+    )
+
+    times = np.arange(0, T, dt)
+    x = np.array([0.0, 1.0])
+    y = np.array([5.0, 6.0])
+
+    x_matrix, y_matrix, t_matrix = np.meshgrid(x, y, times)
+    x_matrix[1, 0, :] = 1.5
+    x_matrix[1, 1, :] = 2.5
+
+    bm._geometry.x_matrix = x_matrix
+    bm._geometry.y_matrix = y_matrix
+    bm._geometry.t_matrix = t_matrix
+    bm._geometry.Ny = len(y)
+    bm._geometry.Nx = len(x)
+    bm._geometry.x = x
+    bm._geometry.y = y
+
+    ds = bm.make_realization(speed_up=True, error=10e-2)
+
+    ds_new = xr.Dataset(
+        {"frames": (["y", "x", "time"], ds.n.values)},
+        coords={
+            "R": (["y", "x"], x_matrix[:, :, 0]),
+            "Z": (["y", "x"], y_matrix[:, :, 0]),
+            "time": (["time"], times),
+        },
+    )
+
+    estimation_options = get_estimation_options()
+    estimation_options.cc_options.cc_window = 1000
+
+    movie_data = td.estimate_velocity_field(ds_new, estimation_options)
+    vx = movie_data.get_vx()
+    assert np.max(np.abs(vx - np.ones(shape=(2, 2)))) < 0.1, "Numerical error too big"
