@@ -261,7 +261,10 @@ class CAOptions:
         """
         Return a string representation of the CAOptions object.
         """
-        return f"Min Threshold: {self.min_threshold}, Max Threshold: {self.max_threshold}, Delta: {self.delta}, Window: {self.window}, Interpolate: {self.interpolate}, Verbose: {self.verbose}"
+        return (
+            f"Min Threshold: {self.min_threshold}, Max Threshold: {self.max_threshold}, Delta: {self.delta},"
+            f" Window: {self.window}, Interpolate: {self.interpolate}, Verbose: {self.verbose}"
+        )
 
 
 @dataclass
@@ -298,7 +301,10 @@ class CCOptions:
         """
         Return a string representation of the CCOptions object.
         """
-        return f"CC Window: {self.cc_window}, Running Mean: {self.running_mean}, Running Mean Window Max: {self.window_max}, Interpolate: {self.interpolate}"
+        return (
+            f"CC Window: {self.cc_window}, Minimum CC Value: {self.minimum_cc_value}, Running Mean: {self.running_mean},"
+            f" Running Mean Window Max: {self.window_max}, Interpolate: {self.interpolate}"
+        )
 
 
 class TDEMethod(Enum):
