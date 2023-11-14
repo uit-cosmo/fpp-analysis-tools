@@ -216,14 +216,18 @@ class MovieData:
         return self._get_field("is_dead")
 
 
-def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
+def get_2d_velocities_from_time_delays(
+    delta_t1, delta_t2, delta_x1, delta_y1, delta_x2, delta_y2
+):
     """
     Estimates radial and poloidal velocities given the input parameters:
     Input:
-         delta_tx Estimation of the time delay between radially separated points.
-         delta_ty Estimation of the time delay between poloidally separated points.
-         delta_x Spatial separation between radially separated points.
-         delta_y Spatial separation between poloidally separated points.
+         delta_t1 Estimation of the time delay between radially separated points.
+         delta_t2 Estimation of the time delay between poloidally separated points.
+         delta_x1 Radial separation between radially separated points.
+         delta_y1 Poloidal separation between radially separated points.
+         delta_x2 Spatial separation between poloidally separated points.
+         delta_y2 Poloidal separation between poloidally separated points.
 
     These quantities should be obtained from three pixel points: a reference pixel point,
     a pixel point separated radially, and a pixel point separated poloidally.
@@ -231,13 +235,27 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          vx Radial velocity
          vy Poloidal velocity
     """
-    if delta_tx == 0:
-        return 0, delta_y / delta_ty
-    if delta_ty == 0:
-        return delta_x / delta_tx, 0
-    fx = delta_x / delta_tx
-    fy = delta_y / delta_ty
-    return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
+
+    numerator_v_term = delta_t2 * delta_y1 - delta_t1 * delta_y2
+    numerator_w_term = delta_t2 * delta_x1 - delta_t1 * delta_x2
+    common_denominator_term = numerator_w_term**2 + numerator_v_term**2
+    determinant = delta_x1 * delta_y2 - delta_x2 * delta_y1
+
+    # Ensure the common denominator term is not zero to avoid division by zero error
+    if common_denominator_term == 0:
+        raise ValueError(
+            "The common denominator term is zero, which will lead to a division by zero error."
+        )
+
+    if determinant == 0:
+        warnings.warn(
+            "Determinant of separations vanishes! This will result in vanishing velocities"
+        )
+
+    v = -numerator_v_term * determinant / common_denominator_term
+    w = numerator_w_term * determinant / common_denominator_term
+
+    return v, w
 
 
 def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
@@ -287,7 +305,9 @@ def _estimate_velocities_given_points(
 
     if use_2d_estimation:
         return (
-            *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            *get_2d_velocities_from_time_delays(
+                delta_tx, delta_ty, r1 - r0, z1 - z0, r2 - r0, z2 - z0
+            ),
             confidence,
             events,
         )
