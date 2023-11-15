@@ -1,6 +1,7 @@
 import numpy as np
 import fppanalysis.time_delay_estimation as tde
 import fppanalysis.two_dim_velocity_estimates as td
+import fppanalysis.utils as u
 import test_utils as tu
 import xarray as xr
 
@@ -16,11 +17,10 @@ def test_rad_and_pol():
     v, w = 1, 1
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     estimation_options = get_estimation_options()
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(ds), estimation_options
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -32,7 +32,7 @@ def test_full():
     v, w = 1, 1
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7, 8]))
     eo = get_estimation_options()
-    movie_data = td.estimate_velocity_field(ds, eo)
+    movie_data = td.estimate_velocity_field(u.SyntheticBlobImagingDataInterface(ds), eo)
     vx = movie_data.get_vx()
     assert np.max(np.abs(vx - np.ones(shape=(4, 3)))) < 0.1, "Numerical error too big"
 
@@ -40,11 +40,10 @@ def test_full():
 def test_rad_and_neg_pol():
     v, w = 1, -1
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(ds), get_estimation_options()
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -55,11 +54,10 @@ def test_rad_and_neg_pol():
 def test_rad_and_2pol():
     v, w = 1, 2
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, get_estimation_options())
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(ds), get_estimation_options()
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -74,11 +72,10 @@ def test_cond_av():
     cond_av_eo = tde.CAOptions(delta=5, window=True)
     estimation_options.method = tde.TDEMethod.CA
     estimation_options.ca_options = cond_av_eo
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, estimation_options)
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(ds), estimation_options
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -109,11 +106,10 @@ def test_ignore_dead_pixels():
     v, w = 1, 1
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     mock_ds = MockXDS(ds)
-    pd = td.estimate_velocities_for_pixel(1, 1, mock_ds, get_estimation_options())
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(mock_ds), get_estimation_options()
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -129,11 +125,10 @@ def test_neighbours():
     estimation_options = get_estimation_options()
     estimation_options.neighbour_options.ccf_min_lag = 1
     estimation_options.neighbour_options.max_separation = 3
-    pd = td.estimate_velocities_for_pixel(0, 0, ds, estimation_options)
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        0, 0, u.SyntheticBlobImagingDataInterface(ds), estimation_options
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -146,11 +141,10 @@ def test_cross_corr_fit():
     ds = tu.make_2d_realization(v, w, np.array([5, 6, 7]), np.array([5, 6, 7]))
     eo = get_estimation_options()
     eo.method = tde.TDEMethod.CCFit
-    pd = td.estimate_velocities_for_pixel(1, 1, ds, eo)
-    (
-        v_est,
-        w_est,
-    ) = (
+    pd = td.estimate_velocities_for_pixel(
+        1, 1, u.SyntheticBlobImagingDataInterface(ds), eo
+    )
+    (v_est, w_est,) = (
         pd.vx,
         pd.vy,
     )
@@ -221,6 +215,8 @@ def test_non_orthogonal_points():
     estimation_options = get_estimation_options()
     estimation_options.cc_options.cc_window = 1000
 
-    movie_data = td.estimate_velocity_field(ds_new, estimation_options)
+    movie_data = td.estimate_velocity_field(
+        u.CModImagingDataInterface(ds_new), estimation_options
+    )
     vx = movie_data.get_vx()
     assert np.max(np.abs(vx - np.ones(shape=(2, 2)))) < 0.1, "Numerical error too big"

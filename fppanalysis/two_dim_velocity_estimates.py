@@ -3,7 +3,6 @@ import warnings
 import fppanalysis.time_delay_estimation as tde
 from fppanalysis import utils
 import numpy as np
-import xarray as xr
 from dataclasses import dataclass
 
 
@@ -12,16 +11,17 @@ class NeighbourOptions:
     def __init__(
         self, ccf_min_lag: int = -1, min_separation: int = 1, max_separation: int = 1
     ):
-        """
-        Neighbour selection algorithm: For each reference pixel P0, four combinations of
-        neighbouring pixels are selected to estimate the velocity: (up, right), (up, left),
-        (down, right) and (down, left). For each combinations, the two neighbouring pixels
-        plus the reference pixel are used to estimate velocities. The resulting velocity
-        is estimated as the mean of all resulting velocities. If a given combination does not
-        lead to a velocity estimate (for example, the cross-correlation has no maximum) then
-        that combination will not contribute to the final mean. If the reference pixel is on
-        the boundary, only two combinations are available. If the reference pixel is on a corner
-        only one combination will be available.
+        """Neighbour selection algorithm: For each reference pixel P0, four
+        combinations of neighbouring pixels are selected to estimate the
+        velocity: (up, right), (up, left), (down, right) and (down, left). For
+        each combinations, the two neighbouring pixels plus the reference pixel
+        are used to estimate velocities. The resulting velocity is estimated as
+        the mean of all resulting velocities. If a given combination does not
+        lead to a velocity estimate (for example, the cross-correlation has no
+        maximum) then that combination will not contribute to the final mean.
+        If the reference pixel is on the boundary, only two combinations are
+        available. If the reference pixel is on a corner only one combination
+        will be available.
 
         In the default case, each neighbour pixel (up, down, right, left) is selected as the
         nearest neighbour in that direction. This class contains options to further control
@@ -46,9 +46,7 @@ class NeighbourOptions:
         self.max_separation = max_separation
 
     def __str__(self):
-        """
-        Return a string representation of the NeighbourOptions object.
-        """
+        """Return a string representation of the NeighbourOptions object."""
         return (
             f"CCF Min Lag: {self.ccf_min_lag}, "
             f"Max Separation: {self.max_separation}, "
@@ -68,8 +66,7 @@ class EstimationOptions:
         ca_options: tde.CAOptions = tde.CAOptions(),
         ccf_options: tde.CCFitOptions = tde.CCFitOptions(),
     ):
-        """
-        Estimation options for velocity estimation method.
+        """Estimation options for velocity estimation method.
 
         - method: fppanalysis.time_delay_estimation.TDEMethod Specifies the time delay method to be used.
         - use_3point_method: [bool] If False, use 2 point method to estimate velocities from time delays.
@@ -98,9 +95,7 @@ class EstimationOptions:
                 return self.ccf_options
 
     def __str__(self):
-        """
-        Return a string representation of the EstimationOptions object.
-        """
+        """Return a string representation of the EstimationOptions object."""
         return (
             f"Method: {self.method}, "
             f"Use 3-Point Method: {self.use_3point_method}, "
@@ -157,10 +152,11 @@ class MovieData:
     Dead pixels have empty PixelData (null vx and vy).
     """
 
-    def __init__(self, ds, estimation_options: EstimationOptions):
-        range_r, range_z = range(0, len(ds.x.values)), range(0, len(ds.y.values))
-        self.r_dim = len(range_r)
-        self.z_dim = len(range_z)
+    def __init__(
+        self, ds: utils.ImagingDataInterface, estimation_options: EstimationOptions
+    ):
+        len_r, len_z = ds.get_shape()
+        range_r, range_z = range(0, len_r), range(0, len_z)
         self.ds = ds
         self.estimation_options = estimation_options
         self.tde_delegator = tde.TDEDelegator(
@@ -282,7 +278,12 @@ def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
 
 
 def _estimate_velocities_given_points(
-    p0, p1, p2, ds, tde_delegator: tde.TDEDelegator, use_2d_estimation: bool
+    p0,
+    p1,
+    p2,
+    ds: utils.ImagingDataInterface,
+    tde_delegator: tde.TDEDelegator,
+    use_2d_estimation: bool,
 ):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
@@ -299,9 +300,9 @@ def _estimate_velocities_given_points(
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    r0, z0 = utils.get_rz(p0[0], p0[1], ds)
-    r1, z1 = utils.get_rz(p1[0], p1[1], ds)
-    r2, z2 = utils.get_rz(p2[0], p2[1], ds)
+    r0, z0 = ds.get_position(p0[0], p0[1])
+    r1, z1 = ds.get_position(p1[0], p1[1])
+    r2, z2 = ds.get_position(p2[0], p2[1])
 
     if use_2d_estimation:
         return (
@@ -319,32 +320,33 @@ def _estimate_velocities_given_points(
         )
 
 
-def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
+def _check_ccf_constrains(
+    p0, p1, ds: utils.ImagingDataInterface, neighbors_ccf_min_lag: int
+):
     """Returns true if the time lag that maximizes the cross-correlation
-    function measure at p0 and p1 is not zero
-    """
+    function measure at p0 and p1 is not zero."""
     import fppanalysis.correlation_function as cf
 
-    signal0 = utils.get_signal(p0[0], p0[1], ds)
-    signal1 = utils.get_signal(p1[0], p1[1], ds)
-
-    if utils.is_pixel_dead(signal1):
+    if ds.is_pixel_dead(p1[0], p1[1]):
         return False
+
+    signal0 = ds.get_signal(p0[0], p0[1])
+    signal1 = ds.get_signal(p1[0], p1[1])
 
     # No need to compute the ccf if the min lag is 0
     if neighbors_ccf_min_lag == 0:
         return True
 
     ccf_times, ccf = cf.corr_fun(
-        signal0, signal1, dt=utils.get_dt(ds), biased=True, norm=True
+        signal0, signal1, dt=ds.get_dt(), biased=True, norm=True
     )
     ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
     ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
     max_index = np.argmax(ccf)
 
-    fulfills_constrain = np.abs(
-        ccf_times[max_index]
-    ) >= neighbors_ccf_min_lag * utils.get_dt(ds)
+    fulfills_constrain = (
+        np.abs(ccf_times[max_index]) >= neighbors_ccf_min_lag * ds.get_dt()
+    )
     if not fulfills_constrain:
         warnings.warn(
             "Pixel {} does not fulfill cross-correlation time lag condition with respect to pixel of {}."
@@ -354,12 +356,14 @@ def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
     return fulfills_constrain
 
 
-def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
+def _find_neighbors(
+    x, y, ds: utils.ImagingDataInterface, neighbour_options: NeighbourOptions
+):
     start = neighbour_options.min_separation
     end = neighbour_options.max_separation
 
     def fulfills_conditions(p):
-        return utils.is_within_boundaries(p, ds) and _check_ccf_constrains(
+        return ds.is_within_boundaries(p[0], p[1]) and _check_ccf_constrains(
             (x, y), p, ds, neighbour_options.ccf_min_lag
         )
 
@@ -396,7 +400,7 @@ def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
 def estimate_velocities_for_pixel(
     x,
     y,
-    ds: xr.Dataset,
+    ds: utils.ImagingDataInterface,
     estimation_options: EstimationOptions = EstimationOptions(),
     tde_delegator: tde.TDEDelegator = None,
 ):
@@ -428,10 +432,10 @@ def estimate_velocities_for_pixel(
     Returns:
         PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
-    r_pos, z_pos = utils.get_rz(x, y, ds)
+    r_pos, z_pos = ds.get_position(x, y)
 
     # If the reference pixel is dead, return empty data right away
-    if utils.is_pixel_dead(utils.get_signal(x, y, ds)):
+    if ds.is_pixel_dead(x, y):
         return PixelData(r_pos=r_pos, z_pos=z_pos, is_dead=True)
 
     h_neighbors, v_neighbors = _find_neighbors(
@@ -450,9 +454,9 @@ def estimate_velocities_for_pixel(
             (x, y), px, py, ds, tde_delegator, estimation_options.use_3point_method
         )
         for px in h_neighbors
-        if utils.is_within_boundaries(px, ds)
+        if ds.is_within_boundaries(px[0], px[1])
         for py in v_neighbors
-        if utils.is_within_boundaries(py, ds)
+        if ds.is_within_boundaries(py[0], py[1])
     ]
 
     results = [r for r in results if r is not None]
@@ -475,17 +479,17 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, estimation_options: EstimationOptions = EstimationOptions()
+    ds: utils.ImagingDataInterface,
+    estimation_options: EstimationOptions = EstimationOptions(),
 ) -> MovieData:
-    """Computes the velocity field of a given dataset ds with GPI data in a
-    format produced by https://github.com/sajidah-ahmed/cmod_functions. The
-    estimation takes into account poloidal flows as described in the 2D
-    filament model. For each pixel, the velocities are estimated using the
-    given pixel, and two neighbour pixels: the right neighbour and the down
-    neighbour. The velocities are estimated from a time delay estimation
-    performed by maximizing either the cross- correlation function or cross
-    conditional average function, which is specified in input argument
-    'method'.
+    """Computes the velocity field of a given dataset ds implementing a
+    utils.ImagingDataInterface class. The estimation takes into account
+    poloidal flows as described in the 2D filament model. For each pixel, the
+    velocities are estimated using the given pixel, and two neighbour pixels:
+    the right neighbour and the down neighbour. The velocities are estimated
+    from a time delay estimation performed by maximizing either the cross-
+    correlation function or cross conditional average function, which is
+    specified in input argument 'method'.
 
     If time delay estimation is performed by maximizing the cross correlation function,
     the confidence of the estimation is a value in the interval (0, 1) given by the
@@ -500,7 +504,7 @@ def estimate_velocity_field(
     from which the velocity field can be easily plotted via f.e matplotlib.quiver.
 
     Input:
-        ds: xarray Dataset
+        ds: utils.ImagingDataInterface data
         estimation_options: EstimationOptions class including all estimation parameters, if not set
         the method will be based on cross-correlation function.
 

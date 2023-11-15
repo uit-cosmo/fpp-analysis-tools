@@ -225,9 +225,7 @@ class CCFitOptions:
         return c * np.exp(-np.abs(times - t0) / taud)
 
     def __str__(self):
-        """
-        Return a string representation of the CCFitOptions object.
-        """
+        """Return a string representation of the CCFitOptions object."""
         return f"Fit Window: {self.fit_window}, Initial Guess: {self.initial_guess}, Interpolate: {self.interpolate}"
 
 
@@ -258,9 +256,7 @@ class CAOptions:
         self.verbose = verbose
 
     def __str__(self):
-        """
-        Return a string representation of the CAOptions object.
-        """
+        """Return a string representation of the CAOptions object."""
         return (
             f"Min Threshold: {self.min_threshold}, Max Threshold: {self.max_threshold}, Delta: {self.delta},"
             f" Window: {self.window}, Interpolate: {self.interpolate}, Verbose: {self.verbose}"
@@ -298,9 +294,7 @@ class CCOptions:
         self.interpolate = interpolate
 
     def __str__(self):
-        """
-        Return a string representation of the CCOptions object.
-        """
+        """Return a string representation of the CCOptions object."""
         return (
             f"CC Window: {self.cc_window}, Minimum CC Value: {self.minimum_cc_value}, Running Mean: {self.running_mean},"
             f" Running Mean Window Max: {self.window_max}, Interpolate: {self.interpolate}"
@@ -308,8 +302,8 @@ class CCOptions:
 
 
 class TDEMethod(Enum):
-    """
-    Possible implemented methods.
+    """Possible implemented methods.
+
     CC = cross-correlation based,
     CA = conditional average based,
     CCFit = cross-correlation fit based
@@ -327,7 +321,7 @@ class TDEDelegator:
         self.cache = cache
         self.results = {}
 
-    def estimate_time_delay(self, p1, p0, ds):
+    def estimate_time_delay(self, p1, p0, ds: utils.ImagingDataInterface):
         if not self.cache:
             return self.estimate_time_delay_uncached(p1, p0, ds)
 
@@ -355,13 +349,13 @@ class TDEDelegator:
 
         return None
 
-    def estimate_time_delay_uncached(self, p1, p0, ds):
+    def estimate_time_delay_uncached(self, p1, p0, ds: utils.ImagingDataInterface):
         extra_debug_info = "between pixels {} and {}".format(p1, p0)
-        x = utils.get_signal(p1[0], p1[1], ds)
-        y = utils.get_signal(p0[0], p0[1], ds)
-        dt = utils.get_dt(ds)
+        x = ds.get_signal(p1[0], p1[1])
+        y = ds.get_signal(p0[0], p0[1])
+        dt = ds.get_dt()
 
-        if utils.is_pixel_dead(x) or utils.is_pixel_dead(y):
+        if ds.is_pixel_dead(p0[0], p0[1]) or ds.is_pixel_dead(p1[0], p1[1]):
             return None, None, None
 
         match self.method:
@@ -524,8 +518,8 @@ def get_time_delay_ccmax_rm_data(
     dt: float,
     options: CCOptions = CCOptions(),
 ):
-    """
-    Returns all data relevant for the method estimate_time_delay_ccmax_running_mean.
+    """Returns all data relevant for the method
+    estimate_time_delay_ccmax_running_mean.
 
     if options.running_mean = False, and interpolate = False, return max_time, ccf_value,
     ccf_times, ccf

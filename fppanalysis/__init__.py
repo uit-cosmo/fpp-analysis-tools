@@ -12,5 +12,6 @@ from .random_phase import *
 from .binning_container import *
 from .time_delay_estimation import *
 from .two_dim_velocity_estimates import *
+from .utils import *
 
 __version__ = "0.1.6"

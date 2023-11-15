@@ -10,7 +10,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.8"
 numpy = "^1.18"
-scipy = "^1.8.0"
+scipy = "^1.11.3"
 tqdm = "^4.62.3"
 PyWavelets = "^1.2.0"
 matplotlib = "^3.6.3"

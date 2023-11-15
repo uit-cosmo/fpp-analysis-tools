@@ -1,90 +1,85 @@
 import numpy as np
+from abc import ABC
+from typing import Tuple, Any
+import xarray as xr
+from numpy import ndarray, dtype
 
 
-def get_rz(x, y, ds):
-    """
-    Get R and Z values for an index
-    """
-    # Exp format
-    if hasattr(ds, "time"):
-        return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.x.isel(x=x).values, ds.y.isel(y=y).values
-    raise "Unknown format"
+class ImagingDataInterface(ABC):
+    def get_shape(self) -> Tuple[int, int]:
+        """Returns a tuple (nr, nz) with the dimensions of the data in the r
+        and z direction."""
+        raise NotImplementedError
+
+    def get_signal(self, x: int, y: int) -> np.ndarray:
+        """Returns an array containing the time series at indexes x, y."""
+        raise NotImplementedError
+
+    def get_dt(self) -> float:
+        """Returns time sampling time."""
+        raise NotImplementedError
+
+    def get_position(self, x: int, y: int) -> Tuple[float, float]:
+        """Returns a tuple with the r and z coordinate of the data at index x,
+        y."""
+        raise NotImplementedError
+
+    def is_pixel_dead(self, x: int, y: int) -> bool:
+        """Returns True if the data at indexes x, y pertains a dead pixel and
+        should not be used for estimation."""
+        raise NotImplementedError
+
+    def is_within_boundaries(self, x: int, y: int) -> bool:
+        """Returns True if the indexes are valid."""
+        shape = self.get_shape()
+        return 0 <= x < shape[0] and 0 <= y < shape[1]
 
 
-def get_rz_full(ds):
-    """
-    Get all R and Z values
-    """
-    # Exp format
-    if hasattr(ds, "time"):
-        shape = (len(ds.x.values), len(ds.y.values))
-        R = np.zeros(shape=shape)
-        Z = np.zeros(shape=shape)
-        for x in ds.x.values:
-            for y in ds.y.values:
-                R[x, y] = ds.R.isel(x=x, y=y).values
-                Z[x, y] = ds.Z.isel(x=x, y=y).values
-        return R, Z
-    # 2d code
-    if hasattr(ds, "t"):
-        return np.meshgrid(ds.x.values, ds.y.values)
-    raise "Unknown format"
+class CModImagingDataInterface(ImagingDataInterface):
+    """Implementation of ImagingDataInterface for xarray datasets given by the
+    code at https://github.com/sajidah-ahmed/cmod_functions."""
+
+    def __init__(self, ds: xr.Dataset):
+        self.ds = ds
+
+    def get_shape(self) -> Tuple[int, int]:
+        return self.ds.dims["x"], self.ds.dims["y"]
+
+    def get_signal(self, x: int, y: int) -> np.ndarray:
+        return self.ds.isel(x=x, y=y)["frames"].values
+
+    def get_dt(self) -> float:
+        times = self.ds["time"]
+        return float(times[1].values - times[0].values)
+
+    def get_position(self, x: int, y: int) -> Tuple[float, float]:
+        return self.ds.R.isel(x=x, y=y).values, self.ds.Z.isel(x=x, y=y).values
+
+    def is_pixel_dead(self, x: int, y: int) -> bool:
+        signal = self.get_signal(x, y)
+        return len(signal) == 0 or np.isnan(signal[0])
 
 
-def get_signal(x, y, ds):
-    """
-    Get signal at a given indexes.
-    """
-    # Exp format
-    if hasattr(ds, "time"):
-        # return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
-        return ds.isel(x=x, y=y)["frames"].values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y)["n"].values
-    raise "Unknown format"
+class SyntheticBlobImagingDataInterface(ImagingDataInterface):
+    """Implementation of ImagingDataInterface for the datasets return by the
+    code https://github.com/uit-cosmo/blobmodel."""
 
+    def __init__(self, ds: xr.Dataset):
+        self.ds = ds
 
-def get_dt(ds):
-    """
-    Get sampling time
-    """
-    # Exp format
-    if hasattr(ds, "time"):
-        times = ds["time"]
-        return times[1].values - times[0].values
-    # 2d code
-    if hasattr(ds, "t"):
-        times = ds["t"]
-        return times[1].values - times[0].values
-    raise "Unknown format"
+    def get_shape(self) -> Tuple[int, int]:
+        return self.ds.dims["x"], self.ds.dims["y"]
 
+    def get_signal(self, x: int, y: int) -> np.ndarray:
+        return self.ds.isel(x=x, y=y)["n"].values
 
-def get_time(x, y, ds):
-    """
-    Get time array for given indexes
-    """
-    # Exp format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).time.values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.t.values
-    raise "Unknown format"
+    def get_dt(self) -> float:
+        times = self.ds["t"]
+        return float(times[1].values - times[0].values)
 
+    def get_position(self, x: int, y: int) -> Tuple[float, float]:
+        return self.ds.x.isel(x=x).values, self.ds.y.isel(y=y).values
 
-def is_pixel_dead(x):
-    """
-    Returns True if the length of the signal is 0, or if the first element is np.nan
-    """
-    return len(x) == 0 or np.isnan(x[0])
-
-
-def is_within_boundaries(p, ds):
-    """
-    Returns True if the tuple p represents indexes within the ranges of the dataset.
-    """
-    return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
+    def is_pixel_dead(self, x: int, y: int) -> bool:
+        signal = self.get_signal(x, y)
+        return len(signal) == 0 or np.isnan(signal[0])
