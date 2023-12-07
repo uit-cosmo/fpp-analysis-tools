@@ -151,13 +151,19 @@ def window_radius(cut_off_freq, time):
     return round(samples)
 
 def run_norm_ds(ds, radius):
-    """Returns running normalized dataset of a given dataset using run_norm from
-    fppanalysis function by applying xarray apply_ufunc. Thanks to the
-    Research software engineering (RSE) group at UiT for help with this.
-
+    """Returns a running normalized xarray dataset of a given xarray dataset ds. The xarray function 
+    'apply_ufunc' is using a running normalization function 'run_norm' from 
+    https://github.com/uit-cosmo/fpp-analysis-tools/blob/main/fppanalysis/running_moments.py.
+    
+    Thanks to the Research software engineering (RSE) group at UiT (University of Tromsø) 
+    for help with this.
+        
     Input:
         - ds: xarray Dataset
         - radius: radius of the window used in run_norm. Window size is 2*radius+1. ... int
+    
+    Output:
+        - ds_normalized: running normalized xarray Dataset
 
     'run_norm' returns a tuple of time base and the signal. Therefore, apply_ufunc will
     return a tuple of two DataArray (corresponding to time base and the signal).
@@ -201,3 +207,44 @@ def run_norm_ds(ds, radius):
     )
 
     return ds_normalized
+
+def run_mean_ds(ds, radius):
+    """Returns a running mean xarray dataset of a given xarray dataset ds. The xarray function 
+    'apply_ufunc' is using a running mean function 'run_mean' from 
+    https://github.com/uit-cosmo/fpp-analysis-tools/blob/main/fppanalysis/running_moments.py.
+    
+    Thanks to the Research software engineering (RSE) group at UiT (University of Tromsø) 
+    for help with this.
+        
+    Input:
+        - ds: xarray Dataset
+        - radius: radius of the window used in run_norm. Window size is 2*radius+1. ... int
+
+    Output:
+        - ds_mean: running mean xarray Dataset
+    
+    See run_norm_ds for description of apply_ufunc arguments.
+    """
+    import xarray as xr
+
+    normalization = xr.apply_ufunc(
+        run_mean,
+        ds["frames"],
+        radius,
+        input_core_dims=[["time"], []],
+        output_core_dims=[["time"]],
+        exclude_dims=set(("time",)),
+        vectorize=True,
+    )
+
+    ds_mean = xr.Dataset(
+        data_vars=dict(
+            frames=(["y", "x", "time"], normalization.data),
+        ),
+        coords=dict(
+            R=(["y", "x"], ds["R"].data),
+            Z=(["y", "x"], ds["Z"].data),
+            time=ds["time"].values[radius:-radius],
+        ),
+    )
+    return ds_mean
