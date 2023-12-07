@@ -1,7 +1,115 @@
+import warnings
+
 import fppanalysis.time_delay_estimation as tde
+from fppanalysis import utils
 import numpy as np
 import xarray as xr
 from dataclasses import dataclass
+
+
+@dataclass
+class NeighbourOptions:
+    def __init__(
+        self, ccf_min_lag: int = -1, min_separation: int = 1, max_separation: int = 1
+    ):
+        """
+        Neighbour selection algorithm: For each reference pixel P0, four combinations of
+        neighbouring pixels are selected to estimate the velocity: (up, right), (up, left),
+        (down, right) and (down, left). For each combinations, the two neighbouring pixels
+        plus the reference pixel are used to estimate velocities. The resulting velocity
+        is estimated as the mean of all resulting velocities. If a given combination does not
+        lead to a velocity estimate (for example, the cross-correlation has no maximum) then
+        that combination will not contribute to the final mean. If the reference pixel is on
+        the boundary, only two combinations are available. If the reference pixel is on a corner
+        only one combination will be available.
+
+        In the default case, each neighbour pixel (up, down, right, left) is selected as the
+        nearest neighbour in that direction. This class contains options to further control
+        neighbour selection.
+
+        - ccf_min_lag: Integer, checks that the maximal correlation between adjacent
+        pixels occurs at a time larger or equal than neighbors_ccf_min_lag multiples of the discretization
+        time. If that's not the case, the next neighbor will be used, and so on until a
+        neighbor pixel is found compliant to this condition. If set to 0, it only checks that
+        the pixel is not dead.
+        - min_separation: Integer, minimum allowed separation between pixels.
+        - max_separation: Integer, maximum allowed separation between pixels. If some
+        condition is required (such as ccf_min_lag) and not fulfilled for pixels closer
+        or at than max_separation, then no neighbors will be used and the subset of pixels
+        under process will yield no estimate. The condition applies on a closed interval,
+        meaning that pixels separated exactly max_separation are allowed, thus setting
+        min_separation = max_separation guarantees that the neighbour pixels will be separated
+        by that distance.
+        """
+        self.ccf_min_lag = ccf_min_lag
+        self.min_separation = min_separation
+        self.max_separation = max_separation
+
+    def __str__(self):
+        """
+        Return a string representation of the NeighbourOptions object.
+        """
+        return (
+            f"CCF Min Lag: {self.ccf_min_lag}, "
+            f"Max Separation: {self.max_separation}, "
+            f"Min Separation: {self.min_separation}"
+        )
+
+
+@dataclass
+class EstimationOptions:
+    def __init__(
+        self,
+        method: tde.TDEMethod = tde.TDEMethod.CC,
+        use_3point_method: bool = True,
+        cache: bool = True,
+        neighbour_options: NeighbourOptions = NeighbourOptions(),
+        cc_options: tde.CCOptions = tde.CCOptions(),
+        ca_options: tde.CAOptions = tde.CAOptions(),
+        ccf_options: tde.CCFitOptions = tde.CCFitOptions(),
+    ):
+        """
+        Estimation options for velocity estimation method.
+
+        - method: fppanalysis.time_delay_estimation.TDEMethod Specifies the time delay method to be used.
+        - use_3point_method: [bool] If False, use 2 point method to estimate velocities from time delays.
+
+        - cache: bool, if True TDE results are cached
+        - neighbour_options: NeighbourOptions Options used for neighbour selection
+        - cc_options: Cross correlation estimation options to be used if method = TDEMethod.CC
+        - ca_options: Conditional average estimation options to be used if method = TDEMethod.CA
+        - ccf_options: Time delay estimation options to be used if method = TDEMethod.CCFit
+        """
+        self.method = method
+        self.use_3point_method = use_3point_method
+        self.cache = cache
+        self.neighbour_options = neighbour_options
+        self.cc_options = cc_options
+        self.ca_options = ca_options
+        self.ccf_options = ccf_options
+
+    def get_time_delay_options(self):
+        match self.method:
+            case tde.TDEMethod.CC:
+                return self.cc_options
+            case tde.TDEMethod.CA:
+                return self.ca_options
+            case tde.TDEMethod.CCFit:
+                return self.ccf_options
+
+    def __str__(self):
+        """
+        Return a string representation of the EstimationOptions object.
+        """
+        return (
+            f"Method: {self.method}, "
+            f"Use 3-Point Method: {self.use_3point_method}, "
+            f"Cache: {self.cache}, "
+            f"Neighbor Options: {self.neighbour_options}, "
+            f"CC Options: {str(self.cc_options)}, "
+            f"CA Options: {str(self.ca_options)}, "
+            f"CCF Options: {str(self.ccf_options)}"
+        )
 
 
 @dataclass
@@ -17,14 +125,16 @@ class PixelData:
             Conditional variance value at maximum cross conditional average for each pixel.
     R: Radial positions
     Z: Poloidal positions
+    is_dead: True if pixel is dead
     """
 
     r_pos: float = 0
     z_pos: float = 0
-    vx: float = 0
-    vy: float = 0
+    vx: float = np.nan
+    vy: float = np.nan
     confidence: float = 0
     events: int = 0
+    is_dead: bool = False
 
 
 class MovieData:
@@ -42,26 +152,42 @@ class MovieData:
                 Conditional variance value at maximum cross conditional average for each pixel.
         R: Radial positions
         Z: Poloidal positions
+        is_dead: True if pixel is dead
 
     Dead pixels have empty PixelData (null vx and vy).
     """
 
-    def __init__(self, range_r, range_z, func):
+    def __init__(self, ds, estimation_options: EstimationOptions):
+        range_r, range_z = range(0, len(ds.x.values)), range(0, len(ds.y.values))
         self.r_dim = len(range_r)
         self.z_dim = len(range_z)
-        self.pixels = [[PixelData() for i in range_z] for j in range_r]
+        self.ds = ds
+        self.estimation_options = estimation_options
+        self.tde_delegator = tde.TDEDelegator(
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
+        )
+        self.pixels = [[PixelData() for _ in range_r] for _ in range_z]
 
-        for i in range_r:
-            for j in range_z:
-                try:
-                    self.pixels[i][j] = func(i, j)
-                except:
-                    print(
-                        "Issues estimating velocity for pixel",
-                        i,
-                        j,
-                        "Run estimate_velocities_for_pixel(i, j, ds, method, **kwargs) to get a detailed error stacktrace",
-                    )
+        for i in range_z:
+            for j in range_r:
+                self.pixels[i][j] = self._set_pixel((j, i))
+
+    def _set_pixel(self, items):
+        i, j = items[0], items[1]
+        try:
+            return estimate_velocities_for_pixel(
+                i, j, self.ds, self.estimation_options, self.tde_delegator
+            )
+        except:
+            print(
+                "Issues estimating velocity for pixel",
+                i,
+                j,
+                "Run estimate_velocities_for_pixel(i, j, ds, eo) to get a detailed error stacktrace",
+            )
+        return PixelData()
 
     def _get_field(self, field_name):
         return np.array(
@@ -86,15 +212,22 @@ class MovieData:
     def get_confidences(self):
         return self._get_field("confidence")
 
+    def get_is_dead(self):
+        return self._get_field("is_dead")
 
-def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
+
+def get_2d_velocities_from_time_delays(
+    delta_t1, delta_t2, delta_x1, delta_y1, delta_x2, delta_y2
+):
     """
     Estimates radial and poloidal velocities given the input parameters:
     Input:
-         delta_tx Estimation of the time delay between radially separated points.
-         delta_ty Estimation of the time delay between poloidally separated points.
-         delta_x Spatial separation between radially separated points.
-         delta_y Spatial separation between poloidally separated points.
+         delta_t1 Estimation of the time delay between radially separated points.
+         delta_t2 Estimation of the time delay between poloidally separated points.
+         delta_x1 Radial separation between radially separated points.
+         delta_y1 Poloidal separation between radially separated points.
+         delta_x2 Spatial separation between poloidally separated points.
+         delta_y2 Poloidal separation between poloidally separated points.
 
     These quantities should be obtained from three pixel points: a reference pixel point,
     a pixel point separated radially, and a pixel point separated poloidally.
@@ -102,155 +235,170 @@ def get_2d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
          vx Radial velocity
          vy Poloidal velocity
     """
-    if delta_tx == 0:
-        return 0, delta_y / delta_ty
-    if delta_ty == 0:
-        return delta_x / delta_tx, 0
-    fx = delta_x / delta_tx
-    fy = delta_y / delta_ty
-    return fx / (1 + (fx / fy) ** 2), fy / (1 + (fy / fx) ** 2)
 
+    numerator_v_term = delta_t2 * delta_y1 - delta_t1 * delta_y2
+    numerator_w_term = delta_t2 * delta_x1 - delta_t1 * delta_x2
+    common_denominator_term = numerator_w_term**2 + numerator_v_term**2
+    determinant = delta_x1 * delta_y2 - delta_x2 * delta_y1
 
-def _get_rz(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.R.isel(x=x, y=y).values, ds.Z.isel(x=x, y=y).values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.x.isel(x=x).values, ds.y.isel(y=y).values
-    raise "Unknown format"
-
-
-def _get_rz_full(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        shape = (len(ds.x.values), len(ds.y.values))
-        R = np.zeros(shape=shape)
-        Z = np.zeros(shape=shape)
-        for x in ds.x.values:
-            for y in ds.y.values:
-                R[x, y] = ds.R.isel(x=x, y=y).values
-                Z[x, y] = ds.Z.isel(x=x, y=y).values
-        return R, Z
-    # 2d code
-    if hasattr(ds, "t"):
-        return np.meshgrid(ds.x.values, ds.y.values)
-    raise "Unknown format"
-
-
-def _get_signal(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).dropna(dim="time", how="any")["frames"].values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.isel(x=x, y=y).dropna(dim="t", how="any")["n"].values
-    raise "Unknown format"
-
-
-def _get_dt(ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        times = ds["time"]
-        return times[1].values - times[0].values
-    # 2d code
-    if hasattr(ds, "t"):
-        times = ds["t"]
-        return times[1].values - times[0].values
-    raise "Unknown format"
-
-
-def _get_time(x, y, ds):
-    # Sajidah's format
-    if hasattr(ds, "time"):
-        return ds.isel(x=x, y=y).time.values
-    # 2d code
-    if hasattr(ds, "t"):
-        return ds.t.values
-    raise "Unknown format"
-
-
-def _estimate_time_delay(
-    x: np.ndarray,
-    x_t: np.ndarray,
-    y: np.ndarray,
-    method: str,
-    dt: float,
-    **kwargs: dict
-):
-
-    if method == "cross_corr":
-        (delta_t, c), events = tde.estimate_time_delay_ccmax(x=x, y=y, dt=dt), 0
-
-    elif method == "cond_av":
-        delta_t, c, events = tde.estimate_time_delay_ccond_av_max(
-            x=x,
-            x_t=x_t,
-            y=y,
-            min_threshold=kwargs["min_threshold"],
-            max_threshold=kwargs["max_threshold"],
-            delta=kwargs["delta"],
-            window=kwargs["window"],
+    # Ensure the common denominator term is not zero to avoid division by zero error
+    if common_denominator_term == 0:
+        raise ValueError(
+            "The common denominator term is zero, which will lead to a division by zero error."
         )
 
-    else:
-        raise Exception("Method must be either cross_corr or cond_av")
+    if determinant == 0:
+        warnings.warn(
+            "Determinant of separations vanishes! This will result in vanishing velocities"
+        )
 
-    return delta_t, c, events
+    v = -numerator_v_term * determinant / common_denominator_term
+    w = numerator_w_term * determinant / common_denominator_term
+
+    return v, w
 
 
-def _estimate_velocities_given_points(p0, p1, p2, ds, method: str, **kwargs: dict):
+def get_1d_velocities_from_time_delays(delta_tx, delta_ty, delta_x, delta_y):
+    """
+    Estimates radial and poloidal velocities from naive method
+    given the input parameters:
+    Input:
+         delta_tx Estimation of the time delay between radially separated points.
+         delta_ty Estimation of the time delay between poloidally separated points.
+         delta_x Spatial separation between radially separated points.
+         delta_y Spatial separation between poloidally separated points.
+
+    These quantities should be obtained from two pixel points:
+        radial direction: a reference pixel point and a pixel point separated radially
+        poloidal direction: a reference pixel point and a pixel point separated poloidally.
+    Returns:
+         vx Radial velocity
+         vy Poloidal velocity
+    """
+    vx = 0 if delta_tx == 0 else delta_x / delta_tx
+    vy = 0 if delta_ty == 0 else delta_y / delta_ty
+
+    return vx, vy
+
+
+def _estimate_velocities_given_points(
+    p0, p1, p2, ds, tde_delegator: tde.TDEDelegator, use_2d_estimation: bool
+):
     """Estimates radial and poloidal velocity from estimated time delay either
     from cross conditional average between the pixels or cross correlation.
 
     This is specified in method argument.
     """
-    dt = _get_dt(ds)
-    r0, z0 = _get_rz(p0[0], p0[1], ds)
-    r1, z1 = _get_rz(p1[0], p1[1], ds)
-    r2, z2 = _get_rz(p2[0], p2[1], ds)
-    signal0 = _get_signal(p0[0], p0[1], ds)
-    signal1 = _get_signal(p1[0], p1[1], ds)
-    signal2 = _get_signal(p2[0], p2[1], ds)
-    time1 = _get_time(p1[0], p1[1], ds)
-    time2 = _get_time(p2[0], p2[1], ds)
+    delta_ty, cy, events_y = tde_delegator.estimate_time_delay(p2, p0, ds)
+    delta_tx, cx, events_x = tde_delegator.estimate_time_delay(p1, p0, ds)
 
-    if len(signal0) == 0 or len(signal1) == 0 or len(signal2) == 0:
+    # If for some reason the time delay cannot be estimated, we return None
+    if delta_tx is None or delta_ty is None:
         return None
-
-    delta_ty, cy, events_y = _estimate_time_delay(
-        x=signal2,
-        x_t=time2,
-        y=signal0,
-        method=method,
-        dt=dt,
-        **kwargs,
-    )
-    delta_tx, cx, events_x = _estimate_time_delay(
-        x=signal1,
-        x_t=time1,
-        y=signal0,
-        method=method,
-        dt=dt,
-        **kwargs,
-    )
 
     confidence = min(cx, cy)
     events = min(events_x, events_y)
 
-    return (
-        *get_2d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
-        confidence,
-        events,
+    r0, z0 = utils.get_rz(p0[0], p0[1], ds)
+    r1, z1 = utils.get_rz(p1[0], p1[1], ds)
+    r2, z2 = utils.get_rz(p2[0], p2[1], ds)
+
+    if use_2d_estimation:
+        return (
+            *get_2d_velocities_from_time_delays(
+                delta_tx, delta_ty, r1 - r0, z1 - z0, r2 - r0, z2 - z0
+            ),
+            confidence,
+            events,
+        )
+    else:
+        return (
+            *get_1d_velocities_from_time_delays(delta_tx, delta_ty, r1 - r0, z2 - z0),
+            confidence,
+            events,
+        )
+
+
+def _check_ccf_constrains(p0, p1, ds, neighbors_ccf_min_lag: int):
+    """Returns true if the time lag that maximizes the cross-correlation
+    function measure at p0 and p1 is not zero
+    """
+    import fppanalysis.correlation_function as cf
+
+    signal0 = utils.get_signal(p0[0], p0[1], ds)
+    signal1 = utils.get_signal(p1[0], p1[1], ds)
+
+    if utils.is_pixel_dead(signal1):
+        return False
+
+    # No need to compute the ccf if the min lag is 0
+    if neighbors_ccf_min_lag == 0:
+        return True
+
+    ccf_times, ccf = cf.corr_fun(
+        signal0, signal1, dt=utils.get_dt(ds), biased=True, norm=True
     )
+    ccf = ccf[np.abs(ccf_times) < max(ccf_times) / 2]
+    ccf_times = ccf_times[np.abs(ccf_times) < max(ccf_times) / 2]
+    max_index = np.argmax(ccf)
+
+    fulfills_constrain = np.abs(
+        ccf_times[max_index]
+    ) >= neighbors_ccf_min_lag * utils.get_dt(ds)
+    if not fulfills_constrain:
+        warnings.warn(
+            "Pixel {} does not fulfill cross-correlation time lag condition with respect to pixel of {}."
+            " Updating.".format(p1, p0)
+        )
+
+    return fulfills_constrain
 
 
-def _is_within_boundaries(p, ds):
-    return 0 <= p[0] < ds.sizes["x"] and 0 <= p[1] < ds.sizes["y"]
+def _find_neighbors(x, y, ds: xr.Dataset, neighbour_options: NeighbourOptions):
+    start = neighbour_options.min_separation
+    end = neighbour_options.max_separation
+
+    def fulfills_conditions(p):
+        return utils.is_within_boundaries(p, ds) and _check_ccf_constrains(
+            (x, y), p, ds, neighbour_options.ccf_min_lag
+        )
+
+    horizontal = []
+    vertical = []
+
+    left = -start
+    while np.abs(left) <= end:
+        if fulfills_conditions((x + left, y)):
+            horizontal.append((x + left, y))
+        left -= 1
+
+    right = start
+    while np.abs(right) <= end:
+        if fulfills_conditions((x + right, y)):
+            horizontal.append((x + right, y))
+        right += 1
+
+    up = start
+    while np.abs(up) <= end:
+        if fulfills_conditions((x, y + up)):
+            vertical.append((x, y + up))
+        up += 1
+
+    down = -start
+    while np.abs(down) <= end:
+        if fulfills_conditions((x, y + down)):
+            vertical.append((x, y + down))
+        down -= 1
+
+    return horizontal, vertical
 
 
 def estimate_velocities_for_pixel(
-    x, y, ds: xr.Dataset, method: str = "cross_corr", **kwargs: dict
+    x,
+    y,
+    ds: xr.Dataset,
+    estimation_options: EstimationOptions = EstimationOptions(),
+    tde_delegator: tde.TDEDelegator = None,
 ):
     """Estimates radial and poloidal velocity for a pixel with indexes x,y
     using all four possible combinations of nearest neighbour pixels (x-1, y),
@@ -273,30 +421,44 @@ def estimate_velocities_for_pixel(
         x: pixel index x
         y: pixel index y
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
-        kwargs: kwargs used in 'cond_av'
-            - min_threshold: min threshold for conditional averaged events
-            - max_threshold: max threshold for conditional averaged events
-            - delta: If window = True, delta is the minimal distance between two peaks.
-            - window: [bool] If True, delta also gives the minimal distance between peaks.
+        estimation_options: EstimationOptions class including all estimation parameters, if not set
+        the method will be based on cross-correlation function.
+
 
     Returns:
         PixelData: Object containing radial and poloidal velocities and method-specific data.
     """
+    r_pos, z_pos = utils.get_rz(x, y, ds)
 
-    h_neighbors = [(x - 1, y), (x + 1, y)]
-    v_neighbors = [(x, y - 1), (x, y + 1)]
+    # If the reference pixel is dead, return empty data right away
+    if utils.is_pixel_dead(utils.get_signal(x, y, ds)):
+        return PixelData(r_pos=r_pos, z_pos=z_pos, is_dead=True)
+
+    h_neighbors, v_neighbors = _find_neighbors(
+        x, y, ds, estimation_options.neighbour_options
+    )
+
+    if tde_delegator is None:
+        tde_delegator = tde.TDEDelegator(
+            estimation_options.method,
+            estimation_options.get_time_delay_options(),
+            estimation_options.cache,
+        )
+
     results = [
-        _estimate_velocities_given_points((x, y), px, py, ds, method, **kwargs)
+        _estimate_velocities_given_points(
+            (x, y), px, py, ds, tde_delegator, estimation_options.use_3point_method
+        )
         for px in h_neighbors
-        if _is_within_boundaries(px, ds)
+        if utils.is_within_boundaries(px, ds)
         for py in v_neighbors
-        if _is_within_boundaries(py, ds)
+        if utils.is_within_boundaries(py, ds)
     ]
+
     results = [r for r in results if r is not None]
-    r_pos, z_pos = _get_rz(x, y, ds)
-    if len(results) == 0:  # If (x,y) is dead we cannot estimate
+    if len(results) == 0:  # If no neighbor pixels are found we cannot estimate
         return PixelData(r_pos=r_pos, z_pos=z_pos)
+
     mean_vx = sum(map(lambda r: r[0], results)) / len(results)
     mean_vy = sum(map(lambda r: r[1], results)) / len(results)
     confidence = sum(map(lambda r: r[2], results)) / len(results)
@@ -313,7 +475,7 @@ def estimate_velocities_for_pixel(
 
 
 def estimate_velocity_field(
-    ds: xr.Dataset, method: str = "cross_corr", **kwargs: dict
+    ds: xr.Dataset, estimation_options: EstimationOptions = EstimationOptions()
 ) -> MovieData:
     """Computes the velocity field of a given dataset ds with GPI data in a
     format produced by https://github.com/sajidah-ahmed/cmod_functions. The
@@ -339,29 +501,12 @@ def estimate_velocity_field(
 
     Input:
         ds: xarray Dataset
-        method: 'cross_corr' or 'cond_av'
-        kwargs: kwargs used in 'cond_av'
-            - min_threshold: min threshold for conditional averaged events
-            - max_threshold: max threshold for conditional averaged events
-            - delta: If window = True, delta is the minimal distance between two peaks.
-            - window: [bool] If True, delta also gives the minimal distance between peaks.
+        estimation_options: EstimationOptions class including all estimation parameters, if not set
+        the method will be based on cross-correlation function.
+
 
     Returns:
         movie_data: Class containing estimation data about all pixels
     """
-    if method == "cond_av":
-        assert {
-            "min_threshold",
-            "max_threshold",
-            "delta",
-            "window",
-        } <= kwargs.keys(), (
-            "Arguments must be provided: min_threshold, max_threshold, delta, window"
-        )
 
-    movie_data = MovieData(
-        range(0, len(ds.x.values)),
-        range(0, len(ds.y.values)),
-        lambda i, j: estimate_velocities_for_pixel(i, j, ds, method, **kwargs),
-    )
-    return movie_data
+    return MovieData(ds, estimation_options)

@@ -10,16 +10,7 @@ from .conditional_averaging_2d import condavg_2d
 from .peak_detection import detect_peaks_1d
 from .random_phase import *
 from .binning_container import *
-from .time_delay_estimation import (
-    estimate_delays,
-    estimate_time_delay_ccmax,
-    get_avg_velocity_from_time_delays,
-    get_velocity_pdf_from_time_delays,
-)
-from .two_dim_velocity_estimates import (
-    get_2d_velocities_from_time_delays,
-    estimate_velocities_for_pixel,
-    estimate_velocity_field
-)
+from .time_delay_estimation import *
+from .two_dim_velocity_estimates import *
 
-__version__ = "0.1.4"
+__version__ = "0.1.6"
