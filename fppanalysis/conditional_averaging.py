@@ -106,6 +106,7 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False, print_ve
 
     gpl_array = gpl_array.astype(int)
     peaks = S[gpl_array]
+    peaks_time_base = T[gpl_array]
     wait = np.append(np.array([T[0]]), T[gpl_array])
     wait = np.diff(wait)
 
@@ -161,4 +162,4 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False, print_ve
             )
             print("In all cases, the first peak per burst was used.")
 
-    return Svals, s_av, s_var, t_av, peaks, wait
+    return Svals, s_av, s_var, t_av, peaks, peaks_time_base, wait
