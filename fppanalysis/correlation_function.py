@@ -5,6 +5,14 @@ import scipy.signal as ssi
 def corr_fun(X, Y, dt, norm=True, biased=True, method="auto"):
     """
     Estimates the correlation function between X and Y using ssi.correlate.
+
+    For consistency with ssi.correlate and np.correlate, the estimated correlation is
+    R(tb) = <X(t+tb) Y(t)> = <X(t) Y(t-tb)>
+    where R is the correlation function and tb is the returned correlation time.
+    For consistency with the definition
+    R'(tb) = <X(t) Y(t+tb)>
+    the correlation function array must be inverted.
+    
     For now, we require both signals to be of equal length.
     
     Input:
