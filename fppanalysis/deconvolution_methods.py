@@ -1,19 +1,24 @@
-# Methods for performing Richardson-Lucy deconvolution.
-# A kernel (pulse shape) is needed.
-# To know this pulse shape, the duration time and asymmetry parameter needs to be estimated from the power spectral density of your time series.
+"""
+ Methods for performing Richardson-Lucy deconvolution.
 
-# Before using the deconvolution, if you have a normalized time series then this needs to be scaled by gamma (intermittency parameter) such that gamma*normalized_signal + gamma.
-# This can be used in the RL_gauss_deconvolve function.
-# Generally, the iterations are better.
-# Check that the result falls to zero during quiet periods, or amplitudes may not be correctly calculated.
-#
-# Then, use three_point_maxima function to find the peaks.
-# Noise is handled by setting a height threshold related to
-# the intermittency parameter (gamma), noise to signal ratio (epsilon) and the mean amplitude of the signal (<A>)
-# where this is <A>*square_root(gamma*epsilon)
-#
-# If you want to reconstruct the time series from the result of the deconvolution and compare this to your original normalized data, remember to UNDO the scaling that you did earlier (i.e. undo gamma*normalized_time_series + gamma)
+ A kernel (pulse shape) is needed. If this is not known, it must be estimated.
+ The duration time and asymmetry parameter of the two-sided exponential pulse may be estimated from the power spectral density of the signal.
+ For best results, ensure the mass of the pulse shape is localized in the middle of the kernel array.
 
+ The method requires a positive definite signal (only positive pulses). 
+ If you have a normalized signal, you must undo the normalization before using the deconvolution.
+ If signal is FPP+noise with intermittency parameter gamma and noise parameter epsilon, undo the normalization with
+ signal = ((1+eps)*gamma)**(0.5)*normalized_signal + gamma
+ This can be used in the RL_gauss_deconvolve function.
+ Generally, more iterations are better.
+ Check that the result falls to zero during quiet periods, or amplitudes may not be correctly calculated.
+
+ Then, use three_point_maxima function to find the peaks.
+ Noise is handled by setting a height threshold related to  the intermittency parameter (gamma), noise to signal ratio (epsilon), and the mean amplitude of the signal (<A>):
+ threshold = <A>*square_root(gamma*epsilon)
+
+ If you want to reconstruct the signal from the result of the deconvolution and compare this to the normalized data, normalize the reconstructed signal.
+"""
 
 def RL_gauss_deconvolve(
     signal,
