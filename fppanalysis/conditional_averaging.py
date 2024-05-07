@@ -1,4 +1,4 @@
-def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
+def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False, print_verbose=True):
     """
     Use: cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False)
     Use the level crossing algorithm to compute the conditional average of
@@ -20,6 +20,9 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
                ............................................ float, def None
         window: If True, delta also gives the minimal distance between peaks.
                 ........................................... bool, def False
+        print_verbose: If True, information about conditional events is printed, 
+                       If False, no information is printed. 
+                       .................................... bool, def True 
 
     Outputs:
         Svals: Signal values used in the conditional average.
@@ -41,7 +44,8 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
 
     places = np.where(sgnl > smin)[0]
     assert len(places) > 0, "No conditional events"
-    print("places to check:{}".format(len(places)), flush=True)
+    if print_verbose:
+        print("places to check:{}".format(len(places)), flush=True)
     dplaces = np.diff(places)
     split = np.where(dplaces != 1)[0]
     # (+1 since dplaces is one ahead with respect to places)
@@ -140,20 +144,21 @@ def cond_av(S, T, smin, smax=None, Sref=None, delta=None, window=False):
     # For a completely random signal, <f^2> >> <f>^2 and CV = 1.
     # OBS: We return 1-CV = <f>^2/<f^2>.
     s_var = s_av ** 2 / np.mean(s_tmp ** 2, axis=1)
-    print("conditional events:{}".format(len(peaks)), flush=True)
-    if badcount > 0:
-        print("bursts where the recorded peak is not the largest:" + str(badcount))
-    if lplcount > 0:
-        print(
-            "There were problems locating unique peaks in {0} bursts, {1:.3f} of all bursts".format(
-                lplcount, lplcount / len(lT)
+    if print_verbose:
+        print("conditional events:{}".format(len(peaks)), flush=True)
+        if badcount > 0:
+            print("bursts where the recorded peak is not the largest:" + str(badcount))
+        if lplcount > 0:
+            print(
+                "There were problems locating unique peaks in {0} bursts, {1:.3f} of all bursts".format(
+                    lplcount, lplcount / len(lT)
+                )
             )
-        )
-        print(
-            "Largest number of peaks in burst:{0}\nLargest difference (data points) between peaks:{1}".format(
-                lplmax, lpldiff
+            print(
+                "Largest number of peaks in burst:{0}\nLargest difference (data points) between peaks:{1}".format(
+                    lplmax, lpldiff
+                )
             )
-        )
-        print("In all cases, the first peak per burst was used.")
+            print("In all cases, the first peak per burst was used.")
 
     return Svals, s_av, s_var, t_av, peaks, wait
