@@ -146,21 +146,19 @@ def three_point_maxima(deconv_result, time_base=None, **kwargs):
     Input:
         deconv_result: result of deconvolution ............... numpy array
         time_base: (optional) time array ................ numpy array
-        **kwargs ................................. passed to find_peaks
+                If time_base is given, estimated_arrival_times are the arrival times in time_base. 
+                If time_base is not given, estimated_arrival_times are the peak locations in deconv_result.
+        **kwargs: Keyword arguments are passed to scipy.find_peaks function
+                By default, the pure 3-point maxima uses the scipy.find_peaks function.
+                In the presence of noise, we suggest using one of the following
+                keyword arguments in order to select for the peaks:
+                    height: required height of peak
+                    prominence: required prominence of peak
+                        may require setting wlen as well, for large arrays.
     Output:
         estimated_arrival_times: estimated location of arrivals ....... numpy array
         estimated_amplitudes: estimated amplitudes ................ numpy array
-
-    If time_base is given, estimated_arrival_times are the arrival times in time_base.
-    If time_base is not given, ta are the peak locations in deconv_result.
-
-    By default, this is a pure 3-point maxima.
-    In the presence of noise, we suggest using one of the following
-    keywords in order to select for the peaks:
-        height: required height of peak
-        prominence: required prominence of peak
-            may require setting wlen as well, for large arrays.
-
+        
     In order to take the entire mass of each peak of deconv_result into account,
     the amplitudes are estimated by summing from one minima between two peaks
     to the minima between the next two peaks. The value of the minima is
