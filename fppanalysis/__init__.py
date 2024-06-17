@@ -12,4 +12,5 @@ from .random_phase import *
 from .binning_container import *
 
 from importlib.metadata import version
+
 __version__ = version(__package__)
