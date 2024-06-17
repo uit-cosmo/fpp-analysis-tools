@@ -11,4 +11,6 @@ from .peak_detection import detect_peaks_1d
 from .random_phase import *
 from .binning_container import *
 
-__version__ = "0.1.6"
+from importlib.metadata import version
+
+__version__ = version(__package__)
