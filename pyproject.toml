@@ -14,7 +14,7 @@ tqdm = "^4.62.3"
 pywavelets = "^1.6.0"
 matplotlib = "^3.6.3"
 mpmath = "^1.2.1"
-numpy = "^2.0.0"
+numpy = ">=1.26.4,<3.0.0"
 
 [build-system]
 requires = ["poetry-core"]
