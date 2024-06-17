@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fppanalysis"
-version = "0.1.4"
+version = "0.2.0"
 description = "Analysis tools for time series"
 homepage = "https://github.com/uit-cosmo/fpp-analysis-tools"
 authors = ["gregordecristoforo <gregor.decristoforo@gmail.com>"]
@@ -8,13 +8,13 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
-numpy = "^1.18"
+python = "^3.9"
 scipy = "^1.8.0"
 tqdm = "^4.62.3"
-PyWavelets = "^1.2.0"
+pywavelets = "^1.6.0"
 matplotlib = "^3.6.3"
 mpmath = "^1.2.1"
+numpy = "^2.0.0"
 
 [build-system]
 requires = ["poetry-core"]
