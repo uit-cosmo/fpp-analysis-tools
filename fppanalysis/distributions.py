@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.stats as sps
-from scipy.integrate import simps
+from scipy.integrate import simpson
 
 
 def cdf(Data, ccdf=True):
@@ -83,9 +83,9 @@ def joint_pdf(X, Y, N=64, pdfs=False):
     if pdfs == False:
         return H, x, y
 
-    Xpdf = simps(H, y, axis=1)
-    Xpdf = Xpdf / simps(Xpdf, x)
-    Ypdf = simps(H, x, axis=0)
-    Ypdf = Ypdf / simps(Ypdf, y)
+    Xpdf = simpson(H, y, axis=1)
+    Xpdf = Xpdf / simpson(Xpdf, x)
+    Ypdf = simpson(H, x, axis=0)
+    Ypdf = Ypdf / simpson(Ypdf, y)
     
     return H, Xpdf, Ypdf, x, y
