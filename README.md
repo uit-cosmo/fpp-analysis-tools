@@ -26,9 +26,9 @@ conda create --name my-env
 conda activate my-env
 # Use the following website to determine what requirements you need:
 # https://docs.rapids.ai/install/
-# Make sure you use the an up-to-date version of python. The example below uses as old python version.
+# However fpp-analysis-tools uses python=3.8
 conda install -c rapidsai -c nvidia -c conda-forge \
-    cusignal=21.08 python=3.9 cudatoolkit=11.0
+    cusignal=21.08 python=3.8 cudatoolkit=11.0
 conda install poetry 
 poetry install
 ```
