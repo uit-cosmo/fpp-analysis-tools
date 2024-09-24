@@ -29,7 +29,7 @@ cd fpp-analysis-tools
 # pixi
 pixi install
 # conda
-conda create --name name-of-my-env --file environment.yml
+conda env create --name name-of-my-env --file environment.yml
 ```
 
 ## Usage
