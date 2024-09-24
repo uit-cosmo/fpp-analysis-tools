@@ -5,13 +5,11 @@ channels:
 - nvidia
 dependencies:
 - python >=3.9,<4
-- cupy >=10,<11
+- cupy >=13.3.0,<14
 - cudatoolkit >=11.8.0,<12
-- pip
-- pip:
-  - numpy>=1.26.4, <3.0.0
-  - scipy>=1.14.1, <2
-  - tqdm>=4.66.5, <5
-  - pywavelets>=1.7.0, <2
-  - matplotlib>=3.9.2, <4
-  - mpmath>=1.3.0, <2
+- numpy >=1.26.4,<2.0.0
+- scipy >=1.13.1,<2
+- tqdm >=4.66.5,<5
+- pywavelets >=1.6.0,<2
+- matplotlib >=3.9.2,<4
+- mpmath >=1.3.0,<2
