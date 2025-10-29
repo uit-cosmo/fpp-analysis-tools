@@ -3,12 +3,70 @@ This file contains methods for parameter estimation from the empirical
 characteristic function.
 """
 
+import numpy as np
+import scipy.optimize as sopt
+import scipy.linalg as slg
 
-def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwargs):
+
+def _empirical_characteristic_function(cf_var, data):
+    """
+    Use: _empirical_characteristic_function(cf_var, data)
+
+    Returns the empirical characteristic function of data
+    at cf_var.
+
+    Input:
+        cf_var: The variables for the characteristic function.
+        data: array of observed values.
+
+    """
+
+    res = np.zeros([cf_var.size, 1], dtype=complex)
+    for i in range(cf_var.size):
+        res[i, 0] = np.mean(np.exp(1.0j * cf_var[i] * data))
+    return res
+
+
+def _error_vector(cf_var, data, CF, P, ECF=None):
+    """
+    Use: _error_vector(cf_var, data, ECF=None)
+
+    Numerical estimate of the error variable n^(1/2) (ECF - CF(P))
+    where n is the number of samples.
+
+    Returns a vector containing all real parts of the error vector
+    followed by all imaginary parts for compatability with the
+    covariance estimate.
+    """
+
+    if ECF is None:
+        ECF = _empirical_characteristic_function(cf_var, data)
+
+    err = data.size ** (0.5) * (ECF - CF(cf_var, P))
+    return np.vstack((np.real(err), np.imag(err)))
+
+
+def _error_covariance_num(cf_var, data, ECF=None):
+    """
+    Use: _error_covariance_num(cf_var, data, ECF=None)
+
+    Numerical estimate of the covariance of the
+    error variable n^(1/2) (ECF - CF)
+    """
+
+    if ECF is None:
+        ECF = _empirical_characteristic_function(cf_var, data)
+
+    cf_var_v, data_v = np.meshgrid(cf_var, data)
+    cov = np.exp(1.0j * cf_var_v * data_v) - ECF[:, 0]
+    Crr = np.dot(np.real(cov).T, np.real(cov)) / (data.size - 1)
+    Cri = np.dot(np.real(cov).T, np.imag(cov)) / (data.size - 1)
+    Cii = np.dot(np.imag(cov).T, np.imag(cov)) / (data.size - 1)
+    return np.block([[Crr, Cri], [Cri.T, Cii]])
+
+
+def est_from_ECF(data, CF, P0, cf_var_len=10, cf_var_step=1.0, **kwargs):
     import numpy as np
-    import scipy.optimize as sopt
-    import scipy.linalg as slg
-    import warnings
 
     """
     Use: est_from_ECF(data, CF, cf_var_len, cf_var_step, P0,
@@ -22,7 +80,6 @@ def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwar
     F(x,P) is CF(u,P) with u the characteristic function variable.
 
     It uses the method described in [1],[2] for iid data.
-    We modify to not split into real and imaginary by [4].
 
     Input:
         data: array of observed values .................... (Nx1) numpy array.
@@ -30,11 +87,10 @@ def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwar
                                                       returning a complex
                                                       (u.size,1)-matrix.
         cf_var_len: Length of the variable array
-                    for the characteristic function. ..................... int
-        cf_var_step: Step size of the variable. ........................ float
+                    for the characteristic function. ......... int, default 10
+        cf_var_step: Step size of the variable. ............ float, default 1.
         P0: Initial guess for the parameter vector P. ............ numpy array
-        imthreshold: tolerance for ratio of im/real in minFun(P) ....... float
-                                                                  default 0.01
+
         **kwargs: keyword arguments passed to
                   scipy.optimize.minimize. ................. keyword arguments
 
@@ -42,6 +98,7 @@ def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwar
         Full result of scipy.optimize.minimize, see that function for details.
 
     Notes:
+    * The default values for cf_var_len and cf_var_step are generally decent.
     * Longer cf_var_len is generally better, but takes longer to perform.
     * If cf_var_step is too small, the matrix is singular [1,3].
     * Some useful CFs are given in the file containing this method.
@@ -52,28 +109,13 @@ def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwar
     [3] M. Carrasco and J. P. florens,
         'Efficient GMM Estimation Using
         the Empirical Characteristic Function*', 2002, unpublished
-    [4] A. Feuerverger and R. A. Mureika,
-        The Annals of Statistics Vol. 5, pp. 88-97, 1977
     """
 
     cf_var = np.arange(1, cf_var_len + 1) * cf_var_step
 
-    # empirical CF. We only compute this once.
-    ECF = np.zeros([cf_var.size, 1], dtype=complex)
-    for i in range(cf_var.size):
-        ECF[i, 0] = np.mean(np.exp(1.0j * cf_var[i] * data))
+    ECF = _empirical_characteristic_function(cf_var, data)
 
-    # The error vector.
-    def errVec(P):
-        return data.size ** (0.5) * (ECF - CF(cf_var, P))
-
-    def genCovMat():
-        cf_var_v, data_v = np.meshgrid(cf_var, data)
-        cov = np.exp(1.0j * cf_var_v * data_v) - ECF[:, 0]
-        CovMat = np.dot(cov.T, np.conj(cov)) / (data.size - 1)
-        return CovMat
-
-    CovMat = genCovMat()
+    CovMat = _error_covariance_num(cf_var, data, ECF=ECF)
 
     def minFun(P):
         # We are interested in minimizing errVec*CovMat^(-1)*np.conj(errVec)^T.
@@ -81,19 +123,67 @@ def est_from_ECF(data, CF, cf_var_len, cf_var_step, P0, imthreshold=0.01, **kwar
         # we solve the linear system
         # CovMat*x = np.conj(eps)
         # and do eps*x.
-        eps = errVec(P)
-        eps2 = slg.solve(CovMat, np.conj(eps))
+        eps = _error_vector(cf_var, data, CF, P, ECF=ECF)
+        eps2 = slg.solve(CovMat, eps)
         res = np.dot(eps.T, eps2)[0, 0]
 
-        if np.imag(res) > (np.real(res) * imthreshold):
-            warnings.warn("significant imaginary part in est_from_ECF module")
-        return np.real(res)
+        return res
 
-    # The minimization
     return sopt.minimize(minFun, P0, **kwargs)
 
 
-def PDF_from_CF_fft(CF, P, Xlen=2 ** 12, dX=0.01):
+def asymptotic_covariance(u, P, CF, CF_jac, samples):
+    # Asymptotic covariance for the real case.
+    # For samples>10**4,
+    Jc = CF_jac(u, P)
+    Jr = np.real(Jc)
+    Ji = np.imag(Jc)
+    J = np.vstack((Jr, Ji))
+
+    Crr = np.zeros([u.size, u.size])
+    Cri = np.zeros([u.size, u.size])
+    Cii = np.zeros([u.size, u.size])
+
+    for i in range(u.size):
+        for j in range(u.size):
+            Crr[i, j] = 0.5 * (
+                np.real(CF(u[i] + u[j], P)) + np.real(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.real(CF(u[j], P))
+            Cri[i, j] = 0.5 * (
+                np.imag(CF(u[i] + u[j], P)) - np.imag(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.imag(CF(u[j], P))
+            Cii[i, j] = 0.5 * (
+                np.real(CF(u[i] - u[j], P)) - np.real(CF(u[i] + u[j], P))
+            ) - np.imag(CF(u[i], P)) * np.imag(CF(u[j], P))
+    C = np.block([[Crr, Cri], [Cri.T, Cii]])
+    print(f"Error covariance matrix condition number: {np.linalg.cond(C)}")
+    tmp = slg.solve(C, J)
+    tmp = np.dot(J.T, tmp)
+    return slg.inv(tmp) / samples
+
+
+def error_covariance_an(u, P, CF):
+    # Analytical covariance of the error variable n^(1/2) (ECF(u) - CF(u))
+    # where n is the number of samples.
+    Crr = np.zeros([u.size, u.size])
+    Cri = np.zeros([u.size, u.size])
+    Cii = np.zeros([u.size, u.size])
+
+    for i in range(u.size):
+        for j in range(u.size):
+            Crr[i, j] = 0.5 * (
+                np.real(CF(u[i] + u[j], P)) + np.real(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.real(CF(u[j], P))
+            Cri[i, j] = 0.5 * (
+                np.imag(CF(u[i] + u[j], P)) - np.imag(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.imag(CF(u[j], P))
+            Cii[i, j] = 0.5 * (
+                np.real(CF(u[i] - u[j], P)) - np.real(CF(u[i] + u[j], P))
+            ) - np.imag(CF(u[i], P)) * np.imag(CF(u[j], P))
+    return np.block([[Crr, Cri], [Cri.T, Cii]])
+
+
+def PDF_from_CF_fft(CF, P, Xlen=2**12, dX=0.01):
     """
     Use: X, pdf = PDF_from_CF_fft(CF, P, Xlen=2**12, dX=0.01)
 
@@ -149,6 +239,29 @@ def CF_exp(u, P):
     return res
 
 
+def CF_jac_exp(u, P):
+    # Jacobian matrix of the CF for the exponential distribution,
+    # [dC/dP[0]]
+    C = CF_exp(u, P)
+    res = np.zeros([u.size, 1], dtype=complex)
+    res[:, 0] = 1.0j * u * C[:, 0] ** 2
+    return res
+
+
+def CF_norm(u, P):
+    res = np.zeros([u.size, 1], dtype=complex)
+    res[:, 0] = np.exp(1.0j * P[0] * u - 0.5 * P[1] ** 2 * u**2)
+    return res
+
+
+def CF_jac_norm(u, P):
+    C = CF_norm(u, P)
+    res = np.zeros([u.size, 2], dtype=complex)
+    res[:, 0] = 1.0j * u * C[:, 0]
+    res[:, 1] = -P[1] * u**2 * C[:, 0]
+    return res
+
+
 def CF_gamma(u, P):
     """
     Use: CF_gamma(u, P)
@@ -169,6 +282,14 @@ def CF_gamma(u, P):
 
     res = np.zeros([u.size, 1], dtype=complex)
     res[:, 0] = (1.0 - 1.0j * P[1] * u) ** (-P[0])
+    return res
+
+
+def CF_jac_gamma(u, P):
+    tmp = 1.0 - 1.0j * P[1] * u
+    res = np.zeros([u.size, 2], dtype=complex)
+    res[:, 0] = -(tmp ** (-P[0])) * np.log(tmp)
+    res[:, 1] = 1.0j * P[0] * u * tmp ** (-1 - P[0])
     return res
 
 
@@ -227,9 +348,20 @@ def CF_gamma_gauss_norm(u, P):
 
     v = 1.0j * u * (P[0] * (1 + P[1])) ** (-0.5)
     tmp1 = (1.0 - v) ** (-P[0])
-    tmp2 = P[0] * (0.5 * P[1] * v ** 2 - v)
+    tmp2 = P[0] * (0.5 * P[1] * v**2 - v)
     res[:, 0] = tmp1 * np.exp(tmp2)
 
+    return res
+
+
+def CF_jac_gamma_gauss_norm(u, P):
+    C = fa.CF_gamma_gauss_norm(u, P)[:, 0]
+    v = 1.0j * u * (P[0] * (1 + P[1])) ** (-0.5)
+
+    res = np.zeros([u.size, 2], dtype=complex)
+    res[:, 0] = -np.log(1 - v) - 0.5 * (v - 2) * v / (v - 1)
+    res[:, 0] *= C
+    res[:, 1] = 0.5 * P[0] * v**3 * C / ((1 + P[1]) * (v - 1))
     return res
 
 
@@ -271,7 +403,7 @@ def CF_general(u, P):
     v = 1.0j * u * (P[0] * (1 + P[2])) ** (-0.5) / B
     tmp1 = (1.0 + P[1] * v) ** (-P[0] * P[1])
     tmp2 = (1.0 - (1.0 - P[1]) * v) ** (-P[0] * (1.0 - P[1]))
-    tmp3 = P[0] * (0.5 * P[2] * B ** 2.0 * v ** 2.0 - (1.0 - 2.0 * P[1]) * v)
+    tmp3 = P[0] * (0.5 * P[2] * B**2.0 * v**2.0 - (1.0 - 2.0 * P[1]) * v)
     res[:, 0] = tmp1 * tmp2 * np.exp(tmp3)
 
     return res
@@ -317,7 +449,7 @@ def CF_general_lorentz(u, P):
     gsq = np.sqrt(np.pi * P[0])
     v = u * ((1 + P[2]) * B2) ** (-0.5)
 
-    tmp_e = -0.5 * P[2] * B2 * v ** 2
+    tmp_e = -0.5 * P[2] * B2 * v**2
     tmp_mr = -1.0j * gsq * (1.0 - 2.0 * P[1]) * v
     tmp_LL1 = -1.0j * gsq * (P[1] ** 2) * v * (1 + 1.0j * P[1] * v / gsq) ** (-0.5)
     tmp_LL2 = (
@@ -371,16 +503,16 @@ def CF_bounded_Pareto(u, P):
     C = mm.matrix(u.size, 1)
 
     def tmp(x, a):
-        return -mm.log(x) - mm.gammainc(0, x) + x ** a * mm.gammainc(-a, x)
+        return -mm.log(x) - mm.gammainc(0, x) + x**a * mm.gammainc(-a, x)
 
     const_0 = -g_m * (a_m ** (-1) + mm.euler)
-    const_1 = g_m / (H_m ** a_m - L_m ** a_m)
+    const_1 = g_m / (H_m**a_m - L_m**a_m)
 
     for i in range(u.size):
         if u_m[i] == 0:
             lnC = 0
         else:
-            lnCtmp = H_m ** a_m * tmp(L_m * u_m[i], a_m) - L_m ** a_m * tmp(
+            lnCtmp = H_m**a_m * tmp(L_m * u_m[i], a_m) - L_m**a_m * tmp(
                 H_m * u_m[i], a_m
             )
             lnC = const_0 + const_1 * lnCtmp
