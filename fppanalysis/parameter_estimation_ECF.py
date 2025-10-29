@@ -64,6 +64,25 @@ def _error_covariance_num(cf_var, data, ECF=None):
     Cii = np.dot(np.imag(cov).T, np.imag(cov)) / (data.size - 1)
     return np.block([[Crr, Cri], [Cri.T, Cii]])
 
+def _error_covariance_an(u, P, CF):
+    # Analytical covariance of the error variable n^(1/2) (ECF(u) - CF(u))
+    # where n is the number of samples.
+    Crr = np.zeros([u.size, u.size])
+    Cri = np.zeros([u.size, u.size])
+    Cii = np.zeros([u.size, u.size])
+
+    for i in range(u.size):
+        for j in range(u.size):
+            Crr[i, j] = 0.5 * (
+                np.real(CF(u[i] + u[j], P)) + np.real(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.real(CF(u[j], P))
+            Cri[i, j] = 0.5 * (
+                np.imag(CF(u[i] + u[j], P)) - np.imag(CF(u[i] - u[j], P))
+            ) - np.real(CF(u[i], P)) * np.imag(CF(u[j], P))
+            Cii[i, j] = 0.5 * (
+                np.real(CF(u[i] - u[j], P)) - np.real(CF(u[i] + u[j], P))
+            ) - np.imag(CF(u[i], P)) * np.imag(CF(u[j], P))
+    return np.block([[Crr, Cri], [Cri.T, Cii]])
 
 def est_from_ECF(data, CF, P0, cf_var_len=10, cf_var_step=1.0, **kwargs):
     import numpy as np
@@ -132,55 +151,26 @@ def est_from_ECF(data, CF, P0, cf_var_len=10, cf_var_step=1.0, **kwargs):
     return sopt.minimize(minFun, P0, **kwargs)
 
 
-def asymptotic_covariance(u, P, CF, CF_jac, samples):
+def asymptotic_covariance(cf_var, P, CF, CF_jac, samples, data=None, ECF=None):
     # Asymptotic covariance for the real case.
+    # If data is provided, computes the numerical error covariance.
     # For samples>10**4,
-    Jc = CF_jac(u, P)
+    Jc = CF_jac(cf_var, P)
     Jr = np.real(Jc)
     Ji = np.imag(Jc)
     J = np.vstack((Jr, Ji))
 
-    Crr = np.zeros([u.size, u.size])
-    Cri = np.zeros([u.size, u.size])
-    Cii = np.zeros([u.size, u.size])
-
-    for i in range(u.size):
-        for j in range(u.size):
-            Crr[i, j] = 0.5 * (
-                np.real(CF(u[i] + u[j], P)) + np.real(CF(u[i] - u[j], P))
-            ) - np.real(CF(u[i], P)) * np.real(CF(u[j], P))
-            Cri[i, j] = 0.5 * (
-                np.imag(CF(u[i] + u[j], P)) - np.imag(CF(u[i] - u[j], P))
-            ) - np.real(CF(u[i], P)) * np.imag(CF(u[j], P))
-            Cii[i, j] = 0.5 * (
-                np.real(CF(u[i] - u[j], P)) - np.real(CF(u[i] + u[j], P))
-            ) - np.imag(CF(u[i], P)) * np.imag(CF(u[j], P))
-    C = np.block([[Crr, Cri], [Cri.T, Cii]])
-    print(f"Error covariance matrix condition number: {np.linalg.cond(C)}")
+    if data is None:
+        C = _error_covariance_an(cf_var, P, CF)
+    else:
+        C = _error_covariance_num(cf_var, data, ECF)
+    #print(f"Error covariance matrix condition number: {np.linalg.cond(C)}")
     tmp = slg.solve(C, J)
     tmp = np.dot(J.T, tmp)
     return slg.inv(tmp) / samples
 
 
-def error_covariance_an(u, P, CF):
-    # Analytical covariance of the error variable n^(1/2) (ECF(u) - CF(u))
-    # where n is the number of samples.
-    Crr = np.zeros([u.size, u.size])
-    Cri = np.zeros([u.size, u.size])
-    Cii = np.zeros([u.size, u.size])
 
-    for i in range(u.size):
-        for j in range(u.size):
-            Crr[i, j] = 0.5 * (
-                np.real(CF(u[i] + u[j], P)) + np.real(CF(u[i] - u[j], P))
-            ) - np.real(CF(u[i], P)) * np.real(CF(u[j], P))
-            Cri[i, j] = 0.5 * (
-                np.imag(CF(u[i] + u[j], P)) - np.imag(CF(u[i] - u[j], P))
-            ) - np.real(CF(u[i], P)) * np.imag(CF(u[j], P))
-            Cii[i, j] = 0.5 * (
-                np.real(CF(u[i] - u[j], P)) - np.real(CF(u[i] + u[j], P))
-            ) - np.imag(CF(u[i], P)) * np.imag(CF(u[j], P))
-    return np.block([[Crr, Cri], [Cri.T, Cii]])
 
 
 def PDF_from_CF_fft(CF, P, Xlen=2**12, dX=0.01):
@@ -318,7 +308,32 @@ def CF_gamma_norm(u, P):
         1.0 - 1.0j * u / np.sqrt(P[0])
     ) ** (-P[0])
     return res
+    
+def CF_jac_gamma_norm(u, P):
+    """
+    Use: CF_jac_gamma_norm(u, P)
 
+    This function returns the jacobian of the characteristic function 
+    of a normalized gamma distributed variable as a complex (u.size, 1)-matrix.
+
+    The gamma distributed random variable is normalized to have
+    zero mean and unit rms.
+    The parameter is the shape parameter k.
+
+    Input:
+        u: The variable of the characteristic function. .......... 1D np array
+        P=[k, ]: The parameters of the gamma distribution. ............... list
+
+    Output:
+        res: the characteristic function. ........ complex (u.size,1) np array
+    """
+    import numpy as np
+
+    C = CF_gamma_norm(u,P)
+    res = np.zeros([u.size, 1], dtype=complex)
+    v = 1.j*u/np.sqrt(P[0])
+    res[:, 0] = -0.5*v*(2-v)/(1-v) - np.log(1-v)
+    return res*C
 
 def CF_gamma_gauss_norm(u, P):
     """
@@ -355,7 +370,7 @@ def CF_gamma_gauss_norm(u, P):
 
 
 def CF_jac_gamma_gauss_norm(u, P):
-    C = fa.CF_gamma_gauss_norm(u, P)[:, 0]
+    C = CF_gamma_gauss_norm(u, P)[:, 0]
     v = 1.0j * u * (P[0] * (1 + P[1])) ** (-0.5)
 
     res = np.zeros([u.size, 2], dtype=complex)
